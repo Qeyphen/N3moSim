@@ -3,7 +3,6 @@
 ![Unity](https://img.shields.io/badge/Unity-6.0-black?logo=unity)
 ![HDRP](https://img.shields.io/badge/Render-HDRP-blue)
 ![ROS2](https://img.shields.io/badge/ROS2-Humble-green)
-![License](https://img.shields.io/badge/License-MIT-yellow)
 
 N3moSim is a high-definition marine simulation environment built in Unity HDRP for training and testing autonomous sailboat ML models. It provides a realistic ocean environment with dynamic and static objects that can be controlled via ROS2 commands.
 
