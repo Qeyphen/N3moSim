@@ -102,6 +102,7 @@ GameObject:
   m_Component:
   - component: {fileID: 6992179634515280090}
   - component: {fileID: 8402069178029801424}
+  - component: {fileID: 8776210208647236929}
   m_Layer: 0
   m_Name: Catamaran
   m_TagString: Untagged
@@ -117,14 +118,14 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 3354167948172651144}
   serializedVersion: 2
-  m_LocalRotation: {x: -0.00000005338508, y: 0.7071068, z: 0.7071068, w: 0.00000005338508}
+  m_LocalRotation: {x: 0, y: 0.7071068, z: 0.7071068, w: 0}
   m_LocalPosition: {x: -3.0661666, y: -0.17656235, z: 5.4748845}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 5805166136182364864}
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: -90, y: 180, z: 0}
 --- !u!54 &8402069178029801424
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -152,6 +153,21 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 0
+--- !u!114 &8776210208647236929
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3354167948172651144}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 410529c7ee10e46ccabb4b4ab0113835, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Buoyancy
+  waterLevel: 0
+  buoyancyForce: 15
+  damping: 0.1
 --- !u!1 &4744243805326988716
 GameObject:
   m_ObjectHideFlags: 0

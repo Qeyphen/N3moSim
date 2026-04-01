@@ -1,0 +1,39 @@
+{
+  "environment": {
+    "wind_speed": 5.0,
+    "wave_height": 1.5,
+    "time_of_day": "day"
+  },
+  "objects": [
+    {
+      "id": "sailboat_01",
+      "type": "Sailboat",
+      "dynamic": true,
+      "ros2_topic": "/sailboat/cmd_vel",
+      "position": [10, 0, 1],
+      "rotation": [0, 50, 0]
+    },
+    {
+      "id": "buoy_01",
+      "type": "Buoy",
+      "dynamic": false,
+      "position": [-15, 0, 30],
+      "rotation": [-90, 180, 0]
+    },
+    {
+      "id": "buoy_02",
+      "type": "Buoy",
+      "dynamic": false,
+      "position": [15, 0, 40],
+      "rotation": [-90, 180, 0]
+    },
+    {
+      "id": "catamaran_01",
+      "type": "Catamaran",
+      "dynamic": true,
+      "ros2_topic": "/catamaran/cmd_vel",
+      "position": [10, 0, 25],
+      "rotation": [-90, 180, 0]
+    }
+  ]
+}
