@@ -1,0 +1,6 @@
+[console_scripts]
+mission_planner = n3mo_control.mission_planner:main
+n3mo_controller = n3mo_control.n3mo_controller:main
+obstacle_detector = n3mo_control.obstacle_detector:main
+sensor_publisher = n3mo_control.sensor_publisher:main
+

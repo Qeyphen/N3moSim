@@ -52,18 +52,38 @@ public class SceneLoader : MonoBehaviour
 
     void LoadConfig()
     {
-        string path = Path.Combine(
-            Application.dataPath, "Config", configFileName);
+        string[] searchPaths = {
+            // N3moSim root config (shared with ROS2)
+            Path.GetFullPath(Path.Combine(
+                Application.dataPath, "..", "..", "config", configFileName)),
 
-        if (!File.Exists(path))
+            // Unity Assets/Config (fallback)
+            Path.Combine(Application.dataPath, "Config", configFileName),
+        };
+
+        string json   = null;
+        string foundPath = null;
+
+        foreach (string path in searchPaths)
         {
-            Debug.LogError($"[SceneLoader] Config not found: {path}");
+            if (File.Exists(path))
+            {
+                json      = File.ReadAllText(path);
+                foundPath = path;
+                break;
+            }
+        }
+
+        if (json == null)
+        {
+            Debug.LogError("[SceneLoader] Config not found! Searched:\n" +
+                string.Join("\n", searchPaths));
             return;
         }
 
-        string json = File.ReadAllText(path);
         config = JsonUtility.FromJson<SceneConfig>(json);
-        Debug.Log($"[SceneLoader] Loaded {config.objects.Count} objects.");
+        Debug.Log($"[SceneLoader] Loaded {config.objects.Count} " +
+                  $"objects from:\n{foundPath}");
     }
 
     void ApplyEnvironment()

@@ -1,0 +1,134 @@
+version: '3.8'
+
+networks:
+  n3mo_network:
+    driver: bridge
+
+services:
+
+  ros_bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: n3mo_control:latest
+    container_name: n3mo_bridge
+    networks:
+      - n3mo_network
+    ports:
+      - "10000:10000"
+    volumes:
+      - ./ros2_ws/src/n3mo_control:/root/ros2_ws/src/n3mo_control
+      - ./config:/n3mosim/config
+    environment:
+      - ROS_DOMAIN_ID=0
+    command: >
+      bash -c "
+        cd /root/ros2_ws &&
+        colcon build --packages-select n3mo_control 2>/dev/null &&
+        export AMENT_PREFIX_PATH=/root/ros2_ws/install/n3mo_control:/root/ros2_ws/install/ros_tcp_endpoint:$$AMENT_PREFIX_PATH &&
+        source /root/ros2_ws/install/setup.bash &&
+        echo 'Starting ROS TCP Bridge on port 10000...' &&
+        ros2 run ros_tcp_endpoint default_server_endpoint
+          --ros-args
+          -p ROS_IP:=0.0.0.0
+          -p ROS_TCP_PORT:=10000
+      "
+    restart: unless-stopped
+
+  n3mo_controller:
+    image: n3mo_control:latest
+    container_name: n3mo_controller
+    networks:
+      - n3mo_network
+    depends_on:
+      - ros_bridge
+    volumes:
+      - ./ros2_ws/src/n3mo_control:/root/ros2_ws/src/n3mo_control
+      - ./config:/n3mosim/config
+    environment:
+      - ROS_DOMAIN_ID=0
+    command: >
+      bash -c "
+        sleep 5 &&
+        cd /root/ros2_ws &&
+        colcon build --packages-select n3mo_control 2>/dev/null &&
+        export AMENT_PREFIX_PATH=/root/ros2_ws/install/n3mo_control:/root/ros2_ws/install/ros_tcp_endpoint:$$AMENT_PREFIX_PATH &&
+        source /root/ros2_ws/install/setup.bash &&
+        echo 'Starting N3mo Controller...' &&
+        ros2 run n3mo_control n3mo_controller
+      "
+    restart: unless-stopped
+
+  mission_planner:
+    image: n3mo_control:latest
+    container_name: n3mo_mission
+    networks:
+      - n3mo_network
+    depends_on:
+      - ros_bridge
+      - n3mo_controller
+    volumes:
+      - ./ros2_ws/src/n3mo_control:/root/ros2_ws/src/n3mo_control
+      - ./config:/n3mosim/config
+    environment:
+      - ROS_DOMAIN_ID=0
+    command: >
+      bash -c "
+        sleep 8 &&
+        cd /root/ros2_ws &&
+        colcon build --packages-select n3mo_control 2>/dev/null &&
+        export AMENT_PREFIX_PATH=/root/ros2_ws/install/n3mo_control:/root/ros2_ws/install/ros_tcp_endpoint:$$AMENT_PREFIX_PATH &&
+        source /root/ros2_ws/install/setup.bash &&
+        echo 'Starting Mission Planner...' &&
+        ros2 run n3mo_control mission_planner
+      "
+    restart: unless-stopped
+
+  sensor_publisher:
+    image: n3mo_control:latest
+    container_name: n3mo_sensors
+    networks:
+      - n3mo_network
+    depends_on:
+      - ros_bridge
+    volumes:
+      - ./ros2_ws/src/n3mo_control:/root/ros2_ws/src/n3mo_control
+      - ./config:/n3mosim/config
+    environment:
+      - ROS_DOMAIN_ID=0
+    command: >
+      bash -c "
+        sleep 6 &&
+        cd /root/ros2_ws &&
+        colcon build --packages-select n3mo_control 2>/dev/null &&
+        export AMENT_PREFIX_PATH=/root/ros2_ws/install/n3mo_control:/root/ros2_ws/install/ros_tcp_endpoint:$$AMENT_PREFIX_PATH &&
+        source /root/ros2_ws/install/setup.bash &&
+        echo 'Starting Sensor Publisher...' &&
+        ros2 run n3mo_control sensor_publisher
+      "
+    restart: unless-stopped
+
+  obstacle_detector:
+    image: n3mo_control:latest
+    container_name: n3mo_obstacles
+    networks:
+      - n3mo_network
+    depends_on:
+      - ros_bridge
+      - sensor_publisher
+    volumes:
+      - ./ros2_ws/src/n3mo_control:/root/ros2_ws/src/n3mo_control
+      - ./config:/n3mosim/config
+    environment:
+      - ROS_DOMAIN_ID=0
+    command: >
+      bash -c "
+        sleep 10 &&
+        cd /root/ros2_ws &&
+        colcon build --packages-select n3mo_control 2>/dev/null &&
+        export AMENT_PREFIX_PATH=/root/ros2_ws/install/n3mo_control:/root/ros2_ws/install/ros_tcp_endpoint:$$AMENT_PREFIX_PATH &&
+        source /root/ros2_ws/install/setup.bash &&
+        echo 'Starting Obstacle Detector...' &&
+        ros2 run n3mo_control obstacle_detector
+      "
+    restart: unless-stopped
