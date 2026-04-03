@@ -28,12 +28,7 @@ class MissionPlanner(Node):
         super().__init__('mission_planner')
 
         self.config = load_config(self.get_logger())
-
-        # Create one publisher per dynamic object
-        # { object_id: Publisher }
         self.cmd_publishers = {}
-
-        # { object_id: mission_state }
         self.mission_states = {}
 
         for obj in self.config.get('objects', []):
@@ -52,11 +47,9 @@ class MissionPlanner(Node):
             self.get_logger().info(
                 f'MissionPlanner controlling: {object_id} → {mission_topic}')
 
-        # GPS from sailboat
         self.create_subscription(
             NavSatFix, '/sailboat/gps', self.on_gps, 10)
 
-        # Obstacle data
         self.create_subscription(
             String, '/obstacles', self.on_obstacles, 10)
 
@@ -76,7 +69,6 @@ class MissionPlanner(Node):
             self.get_logger().error(f'Config error: {e}')
             return {'objects': []}
 
-    # Sensor callbacks
     def on_gps(self, msg):
         self.current_lat = msg.latitude
         self.current_lon = msg.longitude
@@ -130,7 +122,7 @@ class MissionPlanner(Node):
 
         return msg
 
-    # Public: set mission state for any object
+    # set mission state for any object
     def set_mission(self, object_id, state):
         if object_id in self.mission_states:
             self.mission_states[object_id] = state
@@ -140,7 +132,7 @@ class MissionPlanner(Node):
             self.get_logger().warn(
                 f'Unknown object: {object_id}')
 
-    # Public: set all objects to same state
+    # set all objects to same state
     def set_all_missions(self, state):
         for object_id in self.mission_states:
             self.set_mission(object_id, state)

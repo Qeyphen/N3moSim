@@ -93,19 +93,6 @@ public class SceneLoader : MonoBehaviour
         if (wind != null)
             wind.windMain = config.environment.wind_speed;
 
-        // // Sun intensity based on time of day
-        // Light sun = FindFirstObjectByType<Light>();
-        // if (sun != null)
-        // {
-        //     switch (config.environment.time_of_day)
-        //     {
-        //         case "night":  sun.intensity = 0.05f; break;
-        //         case "sunset": sun.intensity = 0.5f;  break;
-        //         case "dawn":   sun.intensity = 0.3f;  break;
-        //         default:       sun.intensity = 1.5f;  break;
-        //     }
-        // }
-
         Debug.Log($"[SceneLoader] Environment applied. " +
                   $"Wind: {config.environment.wind_speed}, " +
                   $"Time: {config.environment.time_of_day}");

@@ -9,9 +9,9 @@ public class ROSController : MonoBehaviour
     public string objectId = "";
 
     [Header("Movement Settings")]
-    public float moveSpeed = 5f;
-    public float turnSpeed = 90f;
-    public float maxSpeed  = 10f;
+    public float moveSpeed = 10f;
+    public float turnSpeed = 50f;
+    public float maxSpeed  = 20f;
 
     private float linearX  = 0f;
     private float angularZ = 0f;
@@ -22,29 +22,23 @@ public class ROSController : MonoBehaviour
     {
         rb = GetComponent<Rigidbody>();
         if (rb == null)
-        {
-            Debug.LogWarning($"[ROSController] '{objectId}' no Rigidbody! Adding one.");
             rb = gameObject.AddComponent<Rigidbody>();
-        }
 
         rb.isKinematic    = false;
         rb.useGravity     = false;
+        rb.mass           = 1f;
         rb.linearDamping  = 0.5f;
         rb.angularDamping = 1f;
 
-        // Subscribe to ROS2 topic via ROS TCP Connector
         ros = ROSConnection.GetOrCreateInstance();
         ros.Subscribe<TwistMsg>(topic, OnROSCommand);
-
         Debug.Log($"[ROSController] '{objectId}' subscribed to: {topic}");
     }
 
-    // Called automatically when ROS2 sends a Twist message
     void OnROSCommand(TwistMsg msg)
     {
         linearX  = (float)msg.linear.x;
         angularZ = (float)msg.angular.z;
-
         Debug.Log($"[ROSController] {objectId} ← " +
                   $"linear.x={linearX:F2} angular.z={angularZ:F2}");
     }
@@ -58,19 +52,22 @@ public class ROSController : MonoBehaviour
     {
         if (rb == null) return;
 
-        // Forward / backward
-        Vector3 force = transform.forward * linearX * moveSpeed;
-        rb.AddForce(force, ForceMode.Force);
+        // Direct velocity control
+        Vector3 targetVelocity = transform.forward * linearX * moveSpeed;
+        rb.linearVelocity = Vector3.Lerp(
+            rb.linearVelocity,
+            targetVelocity,
+            Time.fixedDeltaTime * 5f
+        );
 
-        // Turn
-        rb.AddTorque(Vector3.up * angularZ * turnSpeed, ForceMode.Force);
-
-        // Clamp max speed
-        if (rb.linearVelocity.magnitude > maxSpeed)
-            rb.linearVelocity = rb.linearVelocity.normalized * maxSpeed;
+        // Rotation
+        if (Mathf.Abs(angularZ) > 0.01f)
+        {
+            float yaw = angularZ * turnSpeed * Time.fixedDeltaTime;
+            rb.MoveRotation(rb.rotation * Quaternion.Euler(0, yaw, 0));
+        }
     }
 
-    // Public: set velocity directly (for testing without ROS2)
     public void SetVelocity(float forward, float turn)
     {
         linearX  = forward;

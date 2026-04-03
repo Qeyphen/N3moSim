@@ -33,12 +33,10 @@ class ObstacleDetector(Node):
         self.nearby_pub = self.create_publisher(
             PoseArray, '/obstacles/nearby', 10)
 
-        # All object positions from Unity
         self.create_subscription(
             PoseArray, '/unity/object_positions',
             self.on_objects, 10)
 
-        # Sailboat position (to calculate distances)
         self.create_subscription(
             Pose, '/unity/sailboat_pose',
             self.on_sailboat_pose, 10)
@@ -73,7 +71,6 @@ class ObstacleDetector(Node):
                 self.get_logger().debug(
                     f'Obstacle detected at distance: {distance:.1f}m')
 
-        # Publish both
         self.obstacle_pub.publish(all_obstacles)
         self.nearby_pub.publish(near_obstacles)
 

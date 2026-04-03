@@ -47,7 +47,6 @@ class N3moController(Node):
             ros2_topic = obj.get('ros2_topic', f'/{object_id}/cmd_vel')
             object_type = obj.get('type', 'unknown')
 
-            # Publisher → Unity (moves this specific object)
             publisher = self.create_publisher(Twist, ros2_topic, 10)
 
             # Subscriber ← mission planner (per object commands)
@@ -72,7 +71,6 @@ class N3moController(Node):
                 f"← Mission: {mission_topic}"
             )
 
-        # Publish commands at 10Hz
         self.timer = self.create_timer(0.1, self.publish_all_commands)
 
         self.get_logger().info(
@@ -80,7 +78,6 @@ class N3moController(Node):
             f'Controlling {len(self.dynamic_objects)} dynamic objects.'
         )
 
-    # Load scene_config.json
     def load_config(self, path):
         try:
             with open(path, 'r') as f:
@@ -115,7 +112,7 @@ class N3moController(Node):
         msg.angular.z = float(angular_z)
         self.dynamic_objects[object_id]['current_cmd'] = msg
 
-    # Public: stop a specific object
+    # stop a specific object
     def stop_object(self, object_id):
         self.set_velocity(object_id, 0.0, 0.0)
 

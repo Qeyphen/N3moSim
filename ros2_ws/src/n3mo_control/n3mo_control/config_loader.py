@@ -21,13 +21,8 @@ def load_config(logger=None):
     """
 
     search_paths = [
-        # 1. Mounted from N3moSim root (docker volume)
         '/n3mosim/config/scene_config.json',
-
-        # 2. ROS2 package share directory
         '/root/ros2_ws/install/n3mo_control/share/n3mo_control/config/scene_config.json',
-
-        # 3. Local package config folder
         os.path.join(os.path.dirname(__file__),
                      '..', 'config', 'scene_config.json'),
     ]
