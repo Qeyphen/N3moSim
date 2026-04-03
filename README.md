@@ -16,7 +16,7 @@ N3moSim simulates a realistic marine environment where an autonomous sailboat ca
 
 ---
 
-## ✨ Features
+## Features
 
 - **High Definition Marine Environment** — HDRP ocean with realistic waves, sky, clouds and island terrain
 - **Dynamic Object Spawning** — Objects spawned at runtime from a shared JSON config file
@@ -30,7 +30,7 @@ N3moSim simulates a realistic marine environment where an autonomous sailboat ca
 
 ---
 
-## 🗂️ Project Structure
+## Project Structure
 
 ```
 N3moSim/
@@ -68,7 +68,7 @@ N3moSim/
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ### Scene Population:
 ```
