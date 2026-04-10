@@ -1,19 +1,11 @@
 version: '3.8'
 
-# ─────────────────────────────────────────────────────────────────────────────
-# N3moSim Docker Compose — Mac Compatible
-# - ros_bridge: port mapped so Unity connects via 127.0.0.1:10000
-# - All containers on same ros_net bridge → CycloneDDS unicast works
-# - No fixed IPs — Docker assigns automatically
-# ─────────────────────────────────────────────────────────────────────────────
-
 networks:
   ros_net:
     driver: bridge
 
 services:
 
-  # ── ROS TCP Bridge ────────────────────────────────────────────────────────
   ros_bridge:
     build:
       context: .
@@ -41,7 +33,6 @@ services:
       "
     restart: unless-stopped
 
-  # ── N3mo Controller ───────────────────────────────────────────────────────
   n3mo_controller:
     image: n3mo_control:latest
     container_name: n3mo_controller
@@ -68,7 +59,6 @@ services:
       "
     restart: unless-stopped
 
-  # ── Mission Planner ───────────────────────────────────────────────────────
   mission_planner:
     image: n3mo_control:latest
     container_name: n3mo_mission
@@ -96,7 +86,6 @@ services:
       "
     restart: unless-stopped
 
-  # ── Sensor Publisher ──────────────────────────────────────────────────────
   sensor_publisher:
     image: n3mo_control:latest
     container_name: n3mo_sensors
@@ -123,7 +112,6 @@ services:
       "
     restart: unless-stopped
 
-  # ── Obstacle Detector ─────────────────────────────────────────────────────
   obstacle_detector:
     image: n3mo_control:latest
     container_name: n3mo_obstacles
@@ -148,5 +136,34 @@ services:
         source /root/ros2_ws/install/setup.bash &&
         echo 'Starting Obstacle Detector...' &&
         ros2 run n3mo_control obstacle_detector
+      "
+    restart: unless-stopped
+  
+  trajectory_publisher:
+    image: n3mo_control:latest
+    container_name: n3mo_trajectory
+    networks:
+      - ros_net
+    depends_on:
+      - ros_bridge
+      - n3mo_controller
+    volumes:
+      - ./ros2_ws/src/n3mo_control:/root/ros2_ws/src/n3mo_control
+      - ./config:/n3mosim/config
+    environment:
+      - ROS_DOMAIN_ID=0
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+      - CYCLONEDDS_URI=<CycloneDDS><Domain><General><NetworkInterfaceAddress>eth0</NetworkInterfaceAddress></General></Domain></CycloneDDS>
+      - SCENARIO_FILE=scenario_mixed.json
+    command: >
+      bash -c "
+        sleep 12 &&
+        cd /root/ros2_ws &&
+        colcon build --packages-select n3mo_control 2>/dev/null &&
+        export AMENT_PREFIX_PATH=/root/ros2_ws/install/n3mo_control:/root/ros2_ws/install/ros_tcp_endpoint:$$AMENT_PREFIX_PATH &&
+        source /root/ros2_ws/install/setup.bash &&
+        echo 'Starting Trajectory Publisher...' &&
+        ros2 run n3mo_control trajectory_publisher --ros-args \
+          -p scenario_file:=$${SCENARIO_FILE}
       "
     restart: unless-stopped

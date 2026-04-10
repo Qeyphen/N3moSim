@@ -1,0 +1,34 @@
+{
+  "scenario": "all_circles",
+  "description": "All boats moving in circles",
+  "objects": [
+    {
+      "id": "sailboat_01",
+      "trajectory": "circle",
+      "linear_x": 2.0,
+      "angular_z": 0.3,
+      "phase_offset": 0.0
+    },
+    {
+      "id": "catamaran_01",
+      "trajectory": "circle",
+      "linear_x": 2.5,
+      "angular_z": 0.4,
+      "phase_offset": 1.57
+    },
+    {
+      "id": "catamaran_02",
+      "trajectory": "circle",
+      "linear_x": 2.0,
+      "angular_z": -0.3,
+      "phase_offset": 3.14
+    },
+    {
+      "id": "buoy_03",
+      "trajectory": "circle",
+      "linear_x": 1.5,
+      "angular_z": 0.2,
+      "phase_offset": 4.71
+    }
+  ]
+}

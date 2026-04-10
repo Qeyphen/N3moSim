@@ -55,6 +55,7 @@ setup(
 
             'obstacle_detector  = n3mo_control.obstacle_detector:main',
 
+            'trajectory_publisher = n3mo_control.trajectory_publisher:main',
         ],
 
     },

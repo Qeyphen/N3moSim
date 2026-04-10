@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public class Buoyancy : MonoBehaviour
+public class ShipBuoyancy : MonoBehaviour
 {
     [Header("Buoyancy Settings")]
     public float waterLevel = 0f;
@@ -22,7 +22,6 @@ public class Buoyancy : MonoBehaviour
 
         if (depth > 0)
         {
-            // Object is below water — push it up
             rb.AddForce(Vector3.up * buoyancyForce * depth, ForceMode.Force);
             rb.linearVelocity *= (1f - damping);
         }

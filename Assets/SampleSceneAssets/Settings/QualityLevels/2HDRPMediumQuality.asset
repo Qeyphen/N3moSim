@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   m_RenderPipelineSettings:
     supportShadowMask: 0
-    supportSSR: 0
-    supportSSRTransparent: 0
+    supportSSR: 1
+    supportSSRTransparent: 1
     supportSSAO: 1
-    supportSSGI: 0
+    supportSSGI: 1
     supportSubsurfaceScattering: 1
     subsurfaceScatteringAttenuation: 1
     sssSampleBudget:
@@ -33,12 +33,12 @@ MonoBehaviour:
     supportLightLayers: 1
     renderingLayerMaskBuffer: 0
     supportWater: 1
-    waterSimulationResolution: 128
-    supportWaterExclusion: 0
-    supportWaterHorizontalDeformation: 0
+    waterSimulationResolution: 256
+    supportWaterExclusion: 1
+    supportWaterHorizontalDeformation: 1
     supportWaterDecals: 1
-    waterDecalAtlasSize: 256
-    maximumWaterDecalCount: 48
+    waterDecalAtlasSize: 2048
+    maximumWaterDecalCount: 256
     waterScriptInteractionsMode: 0
     waterFullCPUSimulation: 0
     supportComputeThickness: 0

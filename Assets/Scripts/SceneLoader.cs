@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.IO;
 using System.Collections.Generic;
+using N3mo.Weather;
 
 [System.Serializable]
 public class EnvironmentConfig
@@ -48,6 +49,7 @@ public class SceneLoader : MonoBehaviour
         if (config == null) return;
         ApplyEnvironment();
         SpawnObjects();
+        InstallWeather();
     }
 
     void LoadConfig()
@@ -96,6 +98,13 @@ public class SceneLoader : MonoBehaviour
         Debug.Log($"[SceneLoader] Environment applied. " +
                   $"Wind: {config.environment.wind_speed}, " +
                   $"Time: {config.environment.time_of_day}");
+    }
+
+    void InstallWeather()
+    {
+        GameObject followTarget = GetPrimaryWeatherTarget();
+        RuntimeWeatherInstaller.Install(config, followTarget);
+        Debug.Log("[SceneLoader] Runtime weather installed.");
     }
 
     void SpawnObjects()
@@ -151,5 +160,24 @@ public class SceneLoader : MonoBehaviour
     public GameObject GetSpawnedObject(string id)
     {
         return spawnedObjects.ContainsKey(id) ? spawnedObjects[id] : null;
+    }
+
+    GameObject GetPrimaryWeatherTarget()
+    {
+        string[] preferredTargets = {
+            "sailboat_01",
+            "catamaran_01",
+            "catamaran_02"
+        };
+
+        foreach (string id in preferredTargets)
+        {
+            if (spawnedObjects.TryGetValue(id, out GameObject target) && target != null)
+            {
+                return target;
+            }
+        }
+
+        return null;
     }
 }
