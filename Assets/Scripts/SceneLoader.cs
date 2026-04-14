@@ -2,6 +2,7 @@ using UnityEngine;
 using System.IO;
 using System.Collections.Generic;
 using N3mo.Weather;
+using Cinemachine;
 
 [System.Serializable]
 public class EnvironmentConfig
@@ -63,7 +64,7 @@ public class SceneLoader : MonoBehaviour
             Path.Combine(Application.dataPath, "Config", configFileName),
         };
 
-        string json   = null;
+        string json      = null;
         string foundPath = null;
 
         foreach (string path in searchPaths)
@@ -90,7 +91,6 @@ public class SceneLoader : MonoBehaviour
 
     void ApplyEnvironment()
     {
-        // Wind
         WindZone wind = FindFirstObjectByType<WindZone>();
         if (wind != null)
             wind.windMain = config.environment.wind_speed;
@@ -131,7 +131,45 @@ public class SceneLoader : MonoBehaviour
                 ROSController ros = spawned.AddComponent<ROSController>();
                 ros.topic    = obj.ros2_topic;
                 ros.objectId = obj.id;
-                Debug.Log($"[SceneLoader] DYNAMIC: {obj.id} → {obj.ros2_topic}");
+
+              if (obj.id == "sailboat_01")
+              {
+                  CinemachineVirtualCamera vcam =
+                      FindFirstObjectByType<CinemachineVirtualCamera>();
+                  if (vcam != null)
+                  {
+                      vcam.Follow = spawned.transform;
+                      vcam.LookAt = spawned.transform;
+                      Debug.Log("[SceneLoader] Cinemachine → sailboat_01 ✅");
+                  }
+              }
+
+                switch (obj.type.ToLower())
+                {
+                case "sailboat":
+                    ros.useUpAsForward = false;
+                    ros.invertForward  = false;
+                    ros.moveSpeed      = 2f;
+                    ros.turnSpeed      = 15f;
+                    break;
+
+                    case "catamaran":
+                        ros.useUpAsForward = true;
+                        ros.invertForward  = false;
+                        ros.moveSpeed      = 2f;
+                        ros.turnSpeed      = 15f;
+                        break;
+
+                    case "buoy":
+                        ros.useUpAsForward = true;
+                        ros.invertForward  = false;
+                        ros.moveSpeed      = 1.5f;
+                        ros.turnSpeed      = 10f;
+                        break;
+                }
+
+                Debug.Log($"[SceneLoader] DYNAMIC: {obj.id} ({obj.type}) → {obj.ros2_topic} " +
+                          $"| useUpAsForward={ros.useUpAsForward} invertForward={ros.invertForward}");
             }
             else
             {
@@ -173,9 +211,7 @@ public class SceneLoader : MonoBehaviour
         foreach (string id in preferredTargets)
         {
             if (spawnedObjects.TryGetValue(id, out GameObject target) && target != null)
-            {
                 return target;
-            }
         }
 
         return null;

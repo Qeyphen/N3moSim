@@ -10,8 +10,8 @@
       "type": "Sailboat",
       "dynamic": true,
       "ros2_topic": "/sailboat_01/cmd_vel",
-      "position": [-15, 0, -50],
-      "rotation": [0, 160, 0]
+      "position": [-50, 0, -80],
+      "rotation": [0, -180, 0]
     },
     {
       "id": "buoy_01",
@@ -30,25 +30,22 @@
     {
       "id": "buoy_03",
       "type": "Buoy",
-      "dynamic": true,
-      "ros2_topic": "/buoy_03/cmd_vel",
+      "dynamic": false,
       "position": [35, 0, -35],
       "rotation": [-90, 0, 0]
     },
     {
       "id": "catamaran_01",
       "type": "Catamaran",
-      "dynamic": true,
-      "ros2_topic": "/catamaran_01/cmd_vel",
-      "position": [-5, 0, -60],
+      "dynamic": false,
+      "position": [50, 0, -40],
       "rotation": [-90, 150, 0]
     },
     {
       "id": "catamaran_02",
       "type": "Catamaran",
-      "dynamic": true,
-      "ros2_topic": "/catamaran_02/cmd_vel",
-      "position": [25, 0, -55],
+      "dynamic": false,
+      "position": [80, 0, -60],
       "rotation": [-90, 130, 0]
     }
   ]
