@@ -2,51 +2,63 @@ using UnityEngine;
 
 public class FollowCamera : MonoBehaviour
 {
-    [Header("Target")]
-    public string targetName  = "sailboat_01";
-    public Vector3 offset     = new Vector3(0, 5, 15);
-    public float smoothTime   = 0.3f;
+    [Header("Settings")]
+    public float height   = 10f;
+    public float distance = 250f;
 
     private Transform target;
-    private Vector3 velocity  = Vector3.zero;
 
     void Start()
     {
-        Invoke(nameof(FindTarget), 1f);
+        InvokeRepeating(nameof(FindTarget), 1f, 0.5f);
     }
 
-    void FindTarget()
+void FindTarget()
+{
+    GameObject boat = GameObject.Find("sailboat_01");
+    if (boat == null) return;
+
+    // Look for CameraTarget as child of sailboat specifically
+    Transform ct = boat.transform.Find("CameraTarget");
+    if (ct != null)
     {
-        GameObject obj = GameObject.Find(targetName);
-        if (obj != null)
-        {
-            target = obj.transform;
-            // Snap instantly on first find
-            transform.position = target.position + offset;
-            transform.LookAt(target);
-            Debug.Log($"[FollowCamera] Now following: {targetName}");
-        }
-        else
-        {
-            Debug.Log($"[FollowCamera] Waiting for: {targetName}");
-            Invoke(nameof(FindTarget), 0.5f);
-        }
+        target = ct;
+        CancelInvoke(nameof(FindTarget));
+        Debug.Log($"[Camera] Found CameraTarget child at {target.position}");
+        return;
     }
+
+    // No CameraTarget found — use renderer bounds
+    Renderer[] renderers = boat.GetComponentsInChildren<Renderer>();
+    Vector3 visualCenter = boat.transform.position + Vector3.up * 3f;
+
+    if (renderers.Length > 0)
+    {
+        Bounds bounds = renderers[0].bounds;
+        foreach (Renderer r in renderers)
+            bounds.Encapsulate(r.bounds);
+        visualCenter = bounds.center;
+    }
+
+    GameObject t = new GameObject("CameraTarget");
+    t.transform.position = visualCenter;
+    t.transform.SetParent(boat.transform);
+    target = t.transform;
+
+    CancelInvoke(nameof(FindTarget));
+    Debug.Log($"[Camera] Created CameraTarget at {target.position}");
+}
 
     void LateUpdate()
     {
         if (target == null) return;
 
-        Vector3 targetPos = target.position + offset;
-
-        // SmoothDamp — like the YouTube tutorial
-        transform.position = Vector3.SmoothDamp(
-            transform.position,
-            targetPos,
-            ref velocity,
-            smoothTime
+        transform.position = new Vector3(
+            target.position.x,
+            target.position.y + height,
+            target.position.z + distance
         );
 
-        transform.LookAt(target);
+        transform.LookAt(target.position + Vector3.up * 2f);
     }
 }

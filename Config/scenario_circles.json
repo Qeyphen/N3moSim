@@ -5,7 +5,7 @@
     {
       "id": "sailboat_01",
       "trajectory": "circle",
-      "linear_x": 2.0,
+      "linear_x": -2.0,
       "angular_z": 0.3,
       "phase_offset": 0.0
     },

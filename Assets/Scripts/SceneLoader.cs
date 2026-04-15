@@ -40,12 +40,23 @@ public class SceneLoader : MonoBehaviour
     public GameObject buoyPrefab;
     public GameObject catamaranPrefab;
 
+    [Header("Camera")]
+    [Tooltip("Optional: drag Virtual Camera here. If empty, SceneLoader finds it automatically.")]
+    public CinemachineVirtualCamera virtualCamera;
+
+    [Header("Control Mode")]
+    [Tooltip("Use Pose control (perfect circles) or Velocity control (physics-based)")]
+    public bool usePoseControl = true;
+
     private SceneConfig config;
     private Dictionary<string, GameObject> spawnedObjects
         = new Dictionary<string, GameObject>();
 
     void Start()
     {
+        if (virtualCamera == null)
+            virtualCamera = FindFirstObjectByType<CinemachineVirtualCamera>();
+
         LoadConfig();
         if (config == null) return;
         ApplyEnvironment();
@@ -56,11 +67,8 @@ public class SceneLoader : MonoBehaviour
     void LoadConfig()
     {
         string[] searchPaths = {
-            // N3moSim root config (shared with ROS2)
             Path.GetFullPath(Path.Combine(
                 Application.dataPath, "..", "..", "config", configFileName)),
-
-            // Unity Assets/Config (fallback)
             Path.Combine(Application.dataPath, "Config", configFileName),
         };
 
@@ -85,8 +93,7 @@ public class SceneLoader : MonoBehaviour
         }
 
         config = JsonUtility.FromJson<SceneConfig>(json);
-        Debug.Log($"[SceneLoader] Loaded {config.objects.Count} " +
-                  $"objects from:\n{foundPath}");
+        Debug.Log($"[SceneLoader] Loaded {config.objects.Count} objects from:\n{foundPath}");
     }
 
     void ApplyEnvironment()
@@ -95,9 +102,7 @@ public class SceneLoader : MonoBehaviour
         if (wind != null)
             wind.windMain = config.environment.wind_speed;
 
-        Debug.Log($"[SceneLoader] Environment applied. " +
-                  $"Wind: {config.environment.wind_speed}, " +
-                  $"Time: {config.environment.time_of_day}");
+        Debug.Log($"[SceneLoader] Environment applied. Wind: {config.environment.wind_speed}");
     }
 
     void InstallWeather()
@@ -118,58 +123,68 @@ public class SceneLoader : MonoBehaviour
                 continue;
             }
 
-            Vector3 pos = new Vector3(
-                obj.position[0], obj.position[1], obj.position[2]);
-            Quaternion rot = Quaternion.Euler(
-                obj.rotation[0], obj.rotation[1], obj.rotation[2]);
-
+            Vector3    pos     = new Vector3(obj.position[0], obj.position[1], obj.position[2]);
+            Quaternion rot     = Quaternion.Euler(obj.rotation[0], obj.rotation[1], obj.rotation[2]);
             GameObject spawned = Instantiate(prefab, pos, rot);
-            spawned.name = obj.id;
+            spawned.name       = obj.id;
 
             if (obj.dynamic)
             {
-                ROSController ros = spawned.AddComponent<ROSController>();
-                ros.topic    = obj.ros2_topic;
-                ros.objectId = obj.id;
+                Rigidbody rb = spawned.GetComponent<Rigidbody>();
 
-              if (obj.id == "sailboat_01")
-              {
-                  CinemachineVirtualCamera vcam =
-                      FindFirstObjectByType<CinemachineVirtualCamera>();
-                  if (vcam != null)
-                  {
-                      vcam.Follow = spawned.transform;
-                      vcam.LookAt = spawned.transform;
-                      Debug.Log("[SceneLoader] Cinemachine → sailboat_01 ✅");
-                  }
-              }
-
-                switch (obj.type.ToLower())
+                if (usePoseControl)
                 {
-                case "sailboat":
-                    ros.useUpAsForward = false;
-                    ros.invertForward  = false;
-                    ros.moveSpeed      = 2f;
-                    ros.turnSpeed      = 15f;
-                    break;
+                    // ── POSE CONTROL ──────────────────────────────
+                    // Boat teleports to exact ROS position
+                    // Perfect circles, no physics drift, no backwards movement
+                    if (rb != null)
+                    {
+                        rb.isKinematic = true;
+                        rb.useGravity  = false;
+                    }
 
-                    case "catamaran":
-                        ros.useUpAsForward = true;
-                        ros.invertForward  = false;
-                        ros.moveSpeed      = 2f;
-                        ros.turnSpeed      = 15f;
-                        break;
+                    PoseController pose = spawned.AddComponent<PoseController>();
+                    pose.topic          = $"/{obj.id}/pose";
+                    pose.objectId       = obj.id;
 
-                    case "buoy":
-                        ros.useUpAsForward = true;
-                        ros.invertForward  = false;
-                        ros.moveSpeed      = 1.5f;
-                        ros.turnSpeed      = 10f;
-                        break;
+                    Debug.Log($"[SceneLoader] POSE: {obj.id} → {pose.topic}");
+                }
+                else
+                {
+                    // ── VELOCITY CONTROL ──────────────────────────
+                    // Physics-based movement via Twist commands
+                    ROSController ros = spawned.AddComponent<ROSController>();
+                    ros.topic         = obj.ros2_topic;
+                    ros.objectId      = obj.id;
+
+                    switch (obj.type.ToLower())
+                    {
+                        case "sailboat":
+                            ros.useUpAsForward = false;
+                            ros.invertForward  = false;
+                            ros.moveSpeed      = 2f;
+                            ros.turnSpeed      = 15f;
+                            break;
+                        case "catamaran":
+                            ros.useUpAsForward = true;
+                            ros.invertForward  = false;
+                            ros.moveSpeed      = 2f;
+                            ros.turnSpeed      = 15f;
+                            break;
+                        case "buoy":
+                            ros.useUpAsForward = true;
+                            ros.invertForward  = false;
+                            ros.moveSpeed      = 1.5f;
+                            ros.turnSpeed      = 10f;
+                            break;
+                    }
+
+                    Debug.Log($"[SceneLoader] VELOCITY: {obj.id} ({obj.type}) → {obj.ros2_topic}");
                 }
 
-                Debug.Log($"[SceneLoader] DYNAMIC: {obj.id} ({obj.type}) → {obj.ros2_topic} " +
-                          $"| useUpAsForward={ros.useUpAsForward} invertForward={ros.invertForward}");
+                // Assign first sailboat as Cinemachine target
+                if (obj.id == "sailboat_01")
+                    AssignCameraTarget(spawned);
             }
             else
             {
@@ -182,6 +197,32 @@ public class SceneLoader : MonoBehaviour
         }
 
         Debug.Log($"[SceneLoader] Done. {spawnedObjects.Count} objects spawned.");
+    }
+
+    void AssignCameraTarget(GameObject boat)
+    {
+        if (virtualCamera == null)
+        {
+            Debug.LogWarning("[SceneLoader] No CinemachineVirtualCamera found!");
+            return;
+        }
+
+        Transform cameraTarget = boat.transform.Find("CameraTarget");
+
+        if (cameraTarget == null)
+        {
+            GameObject ct = new GameObject("CameraTarget");
+            ct.transform.SetParent(boat.transform);
+            ct.transform.localPosition = new Vector3(0f, 5f, 0f);
+            cameraTarget = ct.transform;
+            Debug.Log("[SceneLoader] Created CameraTarget at Y+5 above boat");
+        }
+
+        virtualCamera.Follow = cameraTarget;
+        virtualCamera.LookAt = cameraTarget;
+
+        Debug.Log($"[SceneLoader] Cinemachine → {boat.name} " +
+                  $"(target at world pos: {cameraTarget.position})");
     }
 
     GameObject GetPrefab(string type)
@@ -202,18 +243,10 @@ public class SceneLoader : MonoBehaviour
 
     GameObject GetPrimaryWeatherTarget()
     {
-        string[] preferredTargets = {
-            "sailboat_01",
-            "catamaran_01",
-            "catamaran_02"
-        };
-
+        string[] preferredTargets = { "sailboat_01", "catamaran_01", "catamaran_02" };
         foreach (string id in preferredTargets)
-        {
             if (spawnedObjects.TryGetValue(id, out GameObject target) && target != null)
                 return target;
-        }
-
         return null;
     }
 }
