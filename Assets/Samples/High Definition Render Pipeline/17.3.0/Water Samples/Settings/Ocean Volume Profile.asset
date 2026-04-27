@@ -80,8 +80,8 @@ MonoBehaviour:
     m_OverrideState: 0
     m_Value: 8289.296
   aerosolAnisotropy:
-    m_OverrideState: 0
-    m_Value: 0
+    m_OverrideState: 1
+    m_Value: 0.8
   ozoneDensityDimmer:
     m_OverrideState: 0
     m_Value: 1
@@ -93,7 +93,7 @@ MonoBehaviour:
     m_Value: 20000
   groundTint:
     m_OverrideState: 1
-    m_Value: {r: 0.07553097, g: 0.32960576, b: 0.6320754, a: 1}
+    m_Value: {r: 0.29, g: 0.36, b: 0.44, a: 1}
   groundColorTexture:
     m_OverrideState: 0
     m_Value: {fileID: 0}
@@ -167,7 +167,7 @@ MonoBehaviour:
     m_Value: 1
   fixedExposure:
     m_OverrideState: 1
-    m_Value: 13
+    m_Value: 14
   compensation:
     m_OverrideState: 0
     m_Value: 0
@@ -552,7 +552,7 @@ MonoBehaviour:
     m_OverrideState: 0
     m_Value: {r: 1, g: 1, b: 1, a: 1}
   maxFogDistance:
-    m_OverrideState: 0
+    m_OverrideState: 1
     m_Value: 5000
   mipFogMaxMip:
     m_OverrideState: 0
@@ -564,25 +564,25 @@ MonoBehaviour:
     m_OverrideState: 0
     m_Value: 1000
   baseHeight:
-    m_OverrideState: 0
-    m_Value: 0
+    m_OverrideState: 1
+    m_Value: 100
   maximumHeight:
-    m_OverrideState: 0
-    m_Value: 50
+    m_OverrideState: 1
+    m_Value: 500
   meanFreePath:
-    m_OverrideState: 0
-    m_Value: 400
+    m_OverrideState: 1
+    m_Value: 2000
   enableVolumetricFog:
-    m_OverrideState: 0
-    m_Value: 0
+    m_OverrideState: 1
+    m_Value: 1
   albedo:
-    m_OverrideState: 0
-    m_Value: {r: 1, g: 1, b: 1, a: 1}
+    m_OverrideState: 1
+    m_Value: {r: 0.78, g: 0.91, b: 1, a: 1}
   globalLightProbeDimmer:
     m_OverrideState: 0
     m_Value: 1
   depthExtent:
-    m_OverrideState: 0
+    m_OverrideState: 1
     m_Value: 64
   denoisingMode:
     m_OverrideState: 0
@@ -661,7 +661,7 @@ MonoBehaviour:
     m_OverrideState: 0
     m_Value: 6378.1
   renderingSpace:
-    m_OverrideState: 0
+    m_OverrideState: 1
     m_Value: 1
   centerMode:
     m_OverrideState: 0
@@ -796,3 +796,8 @@ MonoBehaviour:
   m_RayMaxIterationsRT:
     m_OverrideState: 0
     m_Value: 48
+  adaptiveProbeVolumesLayerMask:
+    m_OverrideState: 0
+    m_Value:
+      serializedVersion: 0
+      m_Bits: 1

@@ -29,7 +29,7 @@ class PosePublisher(Node):
         self.declare_parameter('speed', 0.3)
         self.speed = self.get_parameter('speed').value
 
-        # Match your scene_config.json sailboat position
+        # Match the scene_config.json sailboat position
         self.center_x = 0.0
         self.center_z = -300.0
         self.water_y  = 1.0
@@ -57,7 +57,7 @@ class PosePublisher(Node):
 
         elif self.scenario == 'eight':
             x   = self.center_x + self.radius * math.sin(self.t)
-            z   = self.center_z + self.radius * math.sin(self.t * 2) / 2
+            z   = self.center_z + self.radius * math.sin(self.t * 2)
             yaw = math.atan2(
                 self.radius * 2 * math.cos(self.t * 2),
                 self.radius * math.cos(self.t)

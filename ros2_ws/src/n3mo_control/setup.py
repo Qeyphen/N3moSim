@@ -58,6 +58,10 @@ setup(
             'trajectory_publisher = n3mo_control.trajectory_publisher:main',
 
             'pose_publisher = n3mo_control.pose_publisher:main',
+            
+            'occupancy_grid_server = n3mo_control.occupancy_grid_server:main',
+
+            'grid_checker          = n3mo_control.grid_checker:main',
         ],
 
     },

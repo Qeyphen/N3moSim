@@ -8,6 +8,10 @@ public class PoseController : MonoBehaviour
     public string topic    = "/pose";
     public string objectId = "";
 
+    [Header("Rotation Fix")]
+    [Tooltip("Extra rotation applied after ROS pose — match to prefab forward axis")]
+    public Vector3 rotationOffset = Vector3.zero;
+
     private ROSConnection ros;
 
     void Start()
@@ -32,7 +36,6 @@ public class PoseController : MonoBehaviour
             (float)msg.pose.orientation.w
         );
 
-        // Fix backwards-facing model — rotate 180° on Y axis
-        transform.rotation = rosRotation * Quaternion.Euler(0, 180, 0);
+        transform.rotation = rosRotation * Quaternion.Euler(rotationOffset);
     }
 }

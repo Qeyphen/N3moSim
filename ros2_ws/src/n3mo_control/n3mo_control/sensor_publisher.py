@@ -27,7 +27,6 @@ class SensorPublisher(Node):
     def __init__(self):
         super().__init__('sensor_publisher')
 
-        # Publishers → ROS2 network
         self.gps_pub  = self.create_publisher(
             NavSatFix, '/sailboat/gps', 10)
 
@@ -40,8 +39,6 @@ class SensorPublisher(Node):
         self.objects_pub = self.create_publisher(
             PoseArray, '/unity/object_positions', 10)
 
-        # Subscribers ← Unity via ROS TCP Bridge
-        # These will be populated once Unity starts sending data
         self.create_subscription(
             Pose, '/unity/sailboat_pose',
             self.on_sailboat_pose, 10)
@@ -81,8 +78,6 @@ class SensorPublisher(Node):
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.header.frame_id = 'sailboat'
 
-        # Convert Unity world position to GPS coordinates
-        # Origin: 48.3833° N, 4.4833° W (Brest, France)
         origin_lat = 48.3833
         origin_lon = -4.4833
         scale      = 0.00001  # meters to degrees

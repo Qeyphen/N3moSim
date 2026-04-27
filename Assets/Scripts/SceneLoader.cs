@@ -134,9 +134,6 @@ public class SceneLoader : MonoBehaviour
 
                 if (usePoseControl)
                 {
-                    // ── POSE CONTROL ──────────────────────────────
-                    // Boat teleports to exact ROS position
-                    // Perfect circles, no physics drift, no backwards movement
                     if (rb != null)
                     {
                         rb.isKinematic = true;
@@ -147,12 +144,28 @@ public class SceneLoader : MonoBehaviour
                     pose.topic          = $"/{obj.id}/pose";
                     pose.objectId       = obj.id;
 
-                    Debug.Log($"[SceneLoader] POSE: {obj.id} → {pose.topic}");
+                    // Per-type rotation offset to match each prefab's forward axis
+                    switch (obj.type.ToLower())
+                    {
+                        case "sailboat":
+                            pose.rotationOffset = new Vector3(0f, 180f, 0f);
+                            break;
+                        case "catamaran":
+                            pose.rotationOffset = new Vector3(0f, 90f, 0f);
+                            break;
+                        case "buoy":
+                            pose.rotationOffset = Vector3.zero;
+                            break;
+                        default:
+                            pose.rotationOffset = Vector3.zero;
+                            break;
+                    }
+
+                    Debug.Log($"[SceneLoader] POSE: {obj.id} ({obj.type}) → {pose.topic} " +
+                              $"| rotationOffset: {pose.rotationOffset}");
                 }
                 else
                 {
-                    // ── VELOCITY CONTROL ──────────────────────────
-                    // Physics-based movement via Twist commands
                     ROSController ros = spawned.AddComponent<ROSController>();
                     ros.topic         = obj.ros2_topic;
                     ros.objectId      = obj.id;
@@ -182,7 +195,6 @@ public class SceneLoader : MonoBehaviour
                     Debug.Log($"[SceneLoader] VELOCITY: {obj.id} ({obj.type}) → {obj.ros2_topic}");
                 }
 
-                // Assign first sailboat as Cinemachine target
                 if (obj.id == "sailboat_01")
                     AssignCameraTarget(spawned);
             }

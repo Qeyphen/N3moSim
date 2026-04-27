@@ -17,14 +17,14 @@
       "id": "buoy_01",
       "type": "Buoy",
       "dynamic": false,
-      "position": [-130, 0, -130],
+      "position": [-190, 0, -110],
       "rotation": [-90, 0, 0]
     },
     {
       "id": "buoy_02",
       "type": "Buoy",
       "dynamic": false,
-      "position": [-110, 0, -140],
+      "position": [-200, 0, -140],
       "rotation": [-90, 0, 0]
     },
     {
