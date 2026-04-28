@@ -19,6 +19,7 @@ services:
     volumes:
       - ./ros2_ws/src/n3mo_control:/root/ros2_ws/src/n3mo_control
       - ./config:/n3mosim/config
+      - ./recordings:/recordings 
     environment:
       - ROS_DOMAIN_ID=0
       - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
@@ -183,6 +184,7 @@ services:
     volumes:
       - ./ros2_ws/src/n3mo_control:/root/ros2_ws/src/n3mo_control
       - ./config:/n3mosim/config
+      - ./recordings:/recordings 
     environment:
       - ROS_DOMAIN_ID=0
       - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
