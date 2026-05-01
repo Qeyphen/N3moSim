@@ -64,6 +64,8 @@ setup(
             'grid_checker          = n3mo_control.grid_checker:main',
 
             'bag_to_csv = n3mo_control.bag_to_csv:main',
+
+            'image_bridge = n3mo_control.image_bridge:main',
         ],
 
     },

@@ -232,3 +232,31 @@ services:
         python3 /root/ros2_ws/src/n3mo_control/n3mo_control/grid_visualiser.py
       "
     restart: unless-stopped
+  
+  image_bridge:
+    image: n3mo_control:latest
+    container_name: n3mo_image
+    networks:
+      - ros_net
+    depends_on:
+      - ros_bridge
+    volumes:
+      - ./ros2_ws/src/n3mo_control:/root/ros2_ws/src/n3mo_control
+      - ./config:/n3mosim/config
+      - ./recordings:/recordings
+    environment:
+      - ROS_DOMAIN_ID=0
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+      - CYCLONEDDS_URI=<CycloneDDS><Domain><General><NetworkInterfaceAddress>eth0</NetworkInterfaceAddress></General></Domain></CycloneDDS>
+    command: >
+      bash -c "
+        sleep 10 &&
+        cd /root/ros2_ws &&
+        source /opt/ros/humble/setup.bash &&
+        colcon build --packages-select n3mo_control 2>/dev/null &&
+        export AMENT_PREFIX_PATH=/root/ros2_ws/install/n3mo_control:/root/ros2_ws/install/ros_tcp_endpoint:$$AMENT_PREFIX_PATH &&
+        source /root/ros2_ws/install/setup.bash &&
+        echo 'Starting Image Bridge...' &&
+        ros2 run n3mo_control image_bridge
+      "
+    restart: unless-stopped
