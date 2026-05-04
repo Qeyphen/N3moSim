@@ -52,7 +52,6 @@ class OccupancyGridServer(Node):
         cols = int(self.width_m  / res)
         rows = int(self.height_m / res)
 
-        # use plain Python list of ints — avoids numpy int8 serialization issues
         data = [0] * (rows * cols)
 
         def mark(wx, wz, obj_type):
