@@ -30,6 +30,8 @@ public class SceneConfig
     public List<ObjectConfig> objects;
 }
 
+public enum ControlMode { Pose, Velocity, Physics }
+
 public class SceneLoader : MonoBehaviour
 {
     [Header("Config")]
@@ -45,8 +47,8 @@ public class SceneLoader : MonoBehaviour
     public CinemachineVirtualCamera virtualCamera;
 
     [Header("Control Mode")]
-    [Tooltip("Use Pose control (perfect circles) or Velocity control (physics-based)")]
-    public bool usePoseControl = true;
+    [Tooltip("Pose = teleport exact position | Velocity = Twist commands | Physics = waypoint forces")]
+    public ControlMode controlMode = ControlMode.Pose;
 
     private SceneConfig config;
     private Dictionary<string, GameObject> spawnedObjects
@@ -132,67 +134,117 @@ public class SceneLoader : MonoBehaviour
             {
                 Rigidbody rb = spawned.GetComponent<Rigidbody>();
 
-                if (usePoseControl)
+                switch (controlMode)
                 {
-                    if (rb != null)
-                    {
-                        rb.isKinematic = true;
-                        rb.useGravity  = false;
-                    }
+                    // Teleports boat to exact position received from ROS2.
+                    case ControlMode.Pose:
 
-                    PoseController pose = spawned.AddComponent<PoseController>();
-                    pose.topic          = $"/{obj.id}/pose";
-                    pose.objectId       = obj.id;
+                        if (rb != null)
+                        {
+                            rb.isKinematic = true;
+                            rb.useGravity  = false;
+                        }
 
-                    // Per-type rotation offset to match each prefab's forward axis
-                    switch (obj.type.ToLower())
-                    {
-                        case "sailboat":
-                            pose.rotationOffset = new Vector3(0f, 180f, 0f);
-                            break;
-                        case "catamaran":
-                            pose.rotationOffset = new Vector3(0f, 90f, 0f);
-                            break;
-                        case "buoy":
-                            pose.rotationOffset = Vector3.zero;
-                            break;
-                        default:
-                            pose.rotationOffset = Vector3.zero;
-                            break;
-                    }
+                        PoseController pose = spawned.AddComponent<PoseController>();
+                        pose.topic          = $"/{obj.id}/pose";
+                        pose.objectId       = obj.id;
 
-                    Debug.Log($"[SceneLoader] POSE: {obj.id} ({obj.type}) → {pose.topic} " +
-                              $"| rotationOffset: {pose.rotationOffset}");
-                }
-                else
-                {
-                    ROSController ros = spawned.AddComponent<ROSController>();
-                    ros.topic         = obj.ros2_topic;
-                    ros.objectId      = obj.id;
+                        switch (obj.type.ToLower())
+                        {
+                            case "sailboat":
+                                pose.rotationOffset = new Vector3(0f, 180f, 0f);
+                                break;
+                            case "catamaran":
+                                pose.rotationOffset = new Vector3(0f, 90f, 0f);
+                                break;
+                            case "buoy":
+                                pose.rotationOffset = Vector3.zero;
+                                break;
+                            default:
+                                pose.rotationOffset = Vector3.zero;
+                                break;
+                        }
 
-                    switch (obj.type.ToLower())
-                    {
-                        case "sailboat":
-                            ros.useUpAsForward = false;
-                            ros.invertForward  = false;
-                            ros.moveSpeed      = 2f;
-                            ros.turnSpeed      = 15f;
-                            break;
-                        case "catamaran":
-                            ros.useUpAsForward = true;
-                            ros.invertForward  = false;
-                            ros.moveSpeed      = 2f;
-                            ros.turnSpeed      = 15f;
-                            break;
-                        case "buoy":
-                            ros.useUpAsForward = true;
-                            ros.invertForward  = false;
-                            ros.moveSpeed      = 1.5f;
-                            ros.turnSpeed      = 10f;
-                            break;
-                    }
+                        Debug.Log($"[SceneLoader] POSE: {obj.id} ({obj.type}) → {pose.topic} " +
+                                  $"| rotationOffset: {pose.rotationOffset}");
+                        break;
 
-                    Debug.Log($"[SceneLoader] VELOCITY: {obj.id} ({obj.type}) → {obj.ros2_topic}");
+                    // Moves boat using Twist (linear/angular velocity) commands.
+                    // Physics-based but command-driven, can drift over time.
+                    case ControlMode.Velocity:
+
+                        ROSController ros = spawned.AddComponent<ROSController>();
+                        ros.topic         = obj.ros2_topic;
+                        ros.objectId      = obj.id;
+
+                        switch (obj.type.ToLower())
+                        {
+                            case "sailboat":
+                                ros.useUpAsForward = false;
+                                ros.invertForward  = false;
+                                ros.moveSpeed      = 2f;
+                                ros.turnSpeed      = 15f;
+                                break;
+                            case "catamaran":
+                                ros.useUpAsForward = true;
+                                ros.invertForward  = false;
+                                ros.moveSpeed      = 2f;
+                                ros.turnSpeed      = 15f;
+                                break;
+                            case "buoy":
+                                ros.useUpAsForward = true;
+                                ros.invertForward  = false;
+                                ros.moveSpeed      = 1.5f;
+                                ros.turnSpeed      = 10f;
+                                break;
+                        }
+
+                        Debug.Log($"[SceneLoader] VELOCITY: {obj.id} ({obj.type}) → {obj.ros2_topic}");
+                        break;
+
+                    // Moves boat toward a waypoint using real Unity forces.
+                    // Rigidbody handles acceleration, drag, momentum naturally.
+                    // Waypoints sent from waypoint_publisher.py via ROS2.
+                    case ControlMode.Physics:
+
+                        PhysicsController phys = spawned.AddComponent<PhysicsController>();
+                        phys.waypointTopic     = $"/{obj.id}/waypoint";
+                        phys.poseTopic         = $"/{obj.id}/actual_pose";
+                        phys.objectId          = obj.id;
+
+                        switch (obj.type.ToLower())
+                        {
+                            case "sailboat":
+                                phys.mass        = 800f;
+                                phys.linearDrag  = 0.3f;
+                                phys.angularDrag = 1.0f;
+                                phys.maxForce    = 4000f;
+                                phys.maxTorque   = 1000f;
+                                phys.maxSpeed    = 6f;
+                                break;
+                            case "catamaran":
+                                phys.mass        = 600f;
+                                phys.linearDrag  = 2.0f;
+                                phys.angularDrag = 2.5f;
+                                phys.maxForce    = 1400f;
+                                phys.maxTorque   = 700f;
+                                phys.maxSpeed    = 5f;
+                                break;
+                            case "buoy":
+                                phys.mass        = 200f;
+                                phys.linearDrag  = 3.0f;
+                                phys.angularDrag = 4.0f;
+                                phys.maxForce    = 400f;
+                                phys.maxTorque   = 200f;
+                                phys.maxSpeed    = 2f;
+                                break;
+                        }
+
+                        Debug.Log($"[SceneLoader] PHYSICS: {obj.id} ({obj.type})" +
+                                  $" | waypoint: {phys.waypointTopic}" +
+                                  $" | mass: {phys.mass}kg" +
+                                  $" | drag: {phys.linearDrag}");
+                        break;
                 }
 
                 if (obj.id == "sailboat_01")
@@ -208,7 +260,8 @@ public class SceneLoader : MonoBehaviour
             spawnedObjects[obj.id] = spawned;
         }
 
-        Debug.Log($"[SceneLoader] Done. {spawnedObjects.Count} objects spawned.");
+        Debug.Log($"[SceneLoader] Done. {spawnedObjects.Count} objects spawned." +
+                  $" Control mode: {controlMode}");
     }
 
     void AssignCameraTarget(GameObject boat)

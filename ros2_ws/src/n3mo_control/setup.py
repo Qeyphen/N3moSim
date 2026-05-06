@@ -66,6 +66,8 @@ setup(
             'bag_to_csv = n3mo_control.bag_to_csv:main',
 
             'image_bridge = n3mo_control.image_bridge:main',
+
+            'waypoint_publisher = n3mo_control.waypoint_publisher:main',
         ],
 
     },
