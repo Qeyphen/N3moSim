@@ -100,84 +100,68 @@ public class PhysicsController : MonoBehaviour
 
     // ── physics update ────────────────────────────────────────────────────────
     void FixedUpdate()
+{
+    // always publish position
+    publishTimer += Time.fixedDeltaTime;
+    if (publishTimer >= 1f / PUBLISH_HZ)
     {
-        // always publish position
-        publishTimer += Time.fixedDeltaTime;
-        if (publishTimer >= 1f / PUBLISH_HZ)
-        {
-            publishTimer = 0f;
-            PublishActualPosition();
-        }
-
-        if (!hasWaypoint) return;
-
-        Vector3 toTarget     = targetWaypoint - transform.position;
-        toTarget.y           = 0f;
-        float   distToTarget = toTarget.magnitude;
-        Vector3 dirToTarget  = toTarget.normalized;
-
-        // ── arrived — coast to a stop ─────────────────────────
-        if (distToTarget < arrivalRadius)
-        {
-            if (!arrived)
-            {
-                arrived = true;
-                Debug.Log($"[PhysicsController] {objectId} arrived at waypoint");
-            }
-
-            // gently brake to a stop using damping
-            rb.linearVelocity = Vector3.Lerp(
-                rb.linearVelocity,
-                Vector3.zero,
-                Time.fixedDeltaTime * 4f
-            );
-            return;
-        }
-
-        arrived = false;
-
-        // ── effective forward axis ────────────────────────────
-        // sailboat prefab mesh faces -Z so we invert transform.forward
-        Vector3 boatForward = invertForward
-            ? -transform.forward
-            :  transform.forward;
-
-        // ── steering ──────────────────────────────────────────
-        float angleToTarget = Vector3.SignedAngle(
-            boatForward, dirToTarget, Vector3.up);
-
-        float torqueFactor = Mathf.Clamp(angleToTarget / 45f, -1f, 1f);
-
-        // invert torque direction when forward is inverted
-        rb.AddTorque(Vector3.up
-            * (invertForward ? -torqueFactor : torqueFactor)
-            * maxTorque);
-
-        // ── arrive throttle — smooth deceleration ─────────────
-        // slowDownRadius = distance at which braking begins
-        // = speed * 2 gives comfortable stopping distance
-        float slowDownRadius = maxSpeed * 3f;
-        float speedTarget    = maxSpeed
-            * Mathf.Clamp01(distToTarget / slowDownRadius);
-
-        // desired velocity = direction × target speed
-        // steering force = how much we need to change current velocity
-        Vector3 desiredVelocity = dirToTarget * speedTarget;
-        Vector3 steeringForce   = desiredVelocity - rb.linearVelocity;
-        steeringForce.y         = 0f;
-
-        // reduce force when turning sharply — real boats slow to turn
-        float alignmentFactor = Mathf.Clamp01(
-            1f - Mathf.Abs(angleToTarget) / 120f);
-
-        rb.AddForce(steeringForce * maxForce * 0.15f * alignmentFactor);
-
-        // ── speed cap ─────────────────────────────────────────
-        Vector3 vel = rb.linearVelocity;
-        vel.y = 0f;
-        if (vel.magnitude > maxSpeed)
-            rb.linearVelocity = vel.normalized * maxSpeed;
+        publishTimer = 0f;
+        PublishActualPosition();
     }
+
+    if (!hasWaypoint) return;
+
+    Vector3 toTarget     = targetWaypoint - transform.position;
+    toTarget.y           = 0f;
+    float   distToTarget = toTarget.magnitude;
+    Vector3 dirToTarget  = toTarget.normalized;
+
+    // ── arrived — hard stop ───────────────────────────────────
+    if (distToTarget < arrivalRadius)
+    {
+        if (!arrived)
+        {
+            arrived = true;
+            Debug.Log($"[PhysicsController] {objectId} arrived");
+        }
+        rb.linearVelocity  = Vector3.zero;
+        rb.angularVelocity = Vector3.zero;
+        return;
+    }
+
+    arrived = false;
+
+    // ── effective forward ─────────────────────────────────────
+    Vector3 boatForward = invertForward ? -transform.forward : transform.forward;
+
+    // ── steering ──────────────────────────────────────────────
+    float angleToTarget = Vector3.SignedAngle(boatForward, dirToTarget, Vector3.up);
+    float torqueFactor  = Mathf.Clamp(angleToTarget / 45f, -1f, 1f);
+    rb.AddTorque(Vector3.up
+        * (invertForward ? -torqueFactor : torqueFactor)
+        * maxTorque);
+
+    // ── propulsion — only push if slower than target speed ────
+    // NO velocity subtraction — that's what caused oscillation
+    float throttle      = Mathf.Clamp01(distToTarget / (arrivalRadius * 4f));
+    float alignment     = Mathf.Clamp01(1f - Mathf.Abs(angleToTarget) / 90f);
+    float targetSpeed   = maxSpeed * throttle;
+    float currentSpeed  = new Vector3(rb.linearVelocity.x, 0, rb.linearVelocity.z).magnitude;
+
+    // only add force if we're going slower than we should be
+    // never add force if we're already at target speed
+    if (currentSpeed < targetSpeed)
+    {
+        float forceFraction = (targetSpeed - currentSpeed) / maxSpeed;
+        rb.AddForce(dirToTarget * maxForce * forceFraction * alignment);
+    }
+
+    // ── speed cap ─────────────────────────────────────────────
+    Vector3 vel = rb.linearVelocity;
+    vel.y = 0f;
+    if (vel.magnitude > maxSpeed)
+        rb.linearVelocity = vel.normalized * maxSpeed;
+}
 
     void PublishActualPosition()
     {

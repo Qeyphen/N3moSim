@@ -216,11 +216,11 @@ public class SceneLoader : MonoBehaviour
                         {
                             case "sailboat":
                                 phys.mass        = 800f;
-                                phys.linearDrag  = 0.3f;
-                                phys.angularDrag = 1.0f;
+                                phys.linearDrag  = 3.0f;
+                                phys.angularDrag = 3.0f;
                                 phys.maxForce    = 4000f;
                                 phys.maxTorque   = 1000f;
-                                phys.maxSpeed    = 6f;
+                                phys.maxSpeed    = 8f;
                                 break;
                             case "catamaran":
                                 phys.mass        = 600f;
