@@ -68,6 +68,8 @@ setup(
             'image_bridge = n3mo_control.image_bridge:main',
 
             'waypoint_publisher = n3mo_control.waypoint_publisher:main',
+
+            'environment_publisher = n3mo_control.environment_publisher:main',
         ],
 
     },

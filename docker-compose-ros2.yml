@@ -198,10 +198,14 @@ services:
         export AMENT_PREFIX_PATH=/root/ros2_ws/install/n3mo_control:/root/ros2_ws/install/ros_tcp_endpoint:$$AMENT_PREFIX_PATH &&
         source /root/ros2_ws/install/setup.bash &&
         echo 'Starting Occupancy Grid Server...' &&
-        ros2 run n3mo_control occupancy_grid_server --ros-args -p origin_x:=-500.0 -p origin_y:=-500.0 -p width_m:=1000.0 -p height_m:=1000.0
+        ros2 run n3mo_control occupancy_grid_server --ros-args \
+          -p origin_x:=-500.0 \
+          -p origin_y:=-500.0 \
+          -p width_m:=1000.0 \
+          -p height_m:=1000.0
       "
     restart: unless-stopped
-  
+
   grid_visualiser:
     image: n3mo_control:latest
     container_name: n3mo_viz
@@ -232,7 +236,7 @@ services:
         python3 /root/ros2_ws/src/n3mo_control/n3mo_control/grid_visualiser.py
       "
     restart: unless-stopped
-  
+
   image_bridge:
     image: n3mo_control:latest
     container_name: n3mo_image
@@ -258,5 +262,32 @@ services:
         source /root/ros2_ws/install/setup.bash &&
         echo 'Starting Image Bridge...' &&
         ros2 run n3mo_control image_bridge
+      "
+    restart: unless-stopped
+
+  environment_controller:
+    image: n3mo_control:latest
+    container_name: n3mo_environment
+    networks:
+      - ros_net
+    depends_on:
+      - ros_bridge
+    volumes:
+      - ./ros2_ws/src/n3mo_control:/root/ros2_ws/src/n3mo_control
+      - ./config:/n3mosim/config
+    environment:
+      - ROS_DOMAIN_ID=0
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+      - CYCLONEDDS_URI=<CycloneDDS><Domain><General><NetworkInterfaceAddress>eth0</NetworkInterfaceAddress></General></Domain></CycloneDDS>
+    command: >
+      bash -c "
+        sleep 8 &&
+        cd /root/ros2_ws &&
+        source /opt/ros/humble/setup.bash &&
+        colcon build --packages-select n3mo_control 2>/dev/null &&
+        export AMENT_PREFIX_PATH=/root/ros2_ws/install/n3mo_control:/root/ros2_ws/install/ros_tcp_endpoint:$$AMENT_PREFIX_PATH &&
+        source /root/ros2_ws/install/setup.bash &&
+        echo 'Environment Controller ready — waiting for /environment/update messages' &&
+        ros2 topic echo /environment/update
       "
     restart: unless-stopped

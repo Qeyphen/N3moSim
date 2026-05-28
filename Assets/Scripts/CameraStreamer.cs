@@ -23,6 +23,10 @@ public class CameraStreamer : MonoBehaviour
 
     void Start()
     {
+
+        AudioListener al = GetComponent<AudioListener>();
+        if (al != null) Destroy(al);
+        
         ros      = ROSConnection.GetOrCreateInstance();
         streamCam = GetComponent<Camera>();
 

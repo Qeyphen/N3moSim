@@ -1,52 +1,47 @@
 # N3moSim — Testing & Recording Runbook
 
-> End-to-end pipeline verification for occupancy grid, live map, recording, and ML dataset export.
+> End-to-end pipeline verification for occupancy grid, static nav map, environment control, live map, recording, and ML dataset export.
 
 | | |
 |---|---|
-| **Stack** | Unity 6 + ROS2 Humble + Docker |
+| **Stack** | Unity 6.3 LTS + ROS2 Humble + Docker |
 | **Project** | N3moSim / Marine Autonomous Vessel |
 
 ---
 
 ## Overview
 
-Follow these 10 phases in order every time you run the simulation, verify the occupancy grid, record a session, and export an ML-ready dataset.
+Follow these phases in order every time you run the simulation.
 
 ```
-Phase 0  — Clean start            stop and restart all Docker containers
-Phase 1  — Occupancy grid         verify static buoys appear (no Unity yet)
-Phase 2  — Connect Unity          verify sailboat appears on the grid
-Phase 3  — Start pose publisher   boat moves in circles
-Phase 4  — Verify camera          frames flowing at ~10Hz
-Phase 5  — Start recording        capture all 8 topics
-Phase 6  — Stop recording
-Phase 7  — Verify the bag         check message counts per topic
-Phase 8  — Export to CSV + frames convert bag to ML files
-Phase 9  — Verify exported data   check files, sizes, trajectory
-Phase 10 — ML readiness check     final validation
+Phase 0  — Clean start              stop and restart all Docker containers
+Phase 1  — Occupancy grid           verify static buoys appear (no Unity yet)
+Phase 2  — Connect Unity            verify sailboat appears and moves on the grid
+Phase 3  — Verify static nav map    check /map topic and open map.pgm
+Phase 4  — Environment control      test weather, time of day, wave height
+Phase 5  — Start pose publisher     boat moves in circles for recording
+Phase 6  — Verify camera            frames flowing at ~10Hz
+Phase 7  — Start recording          capture all topics
+Phase 8  — Stop recording
+Phase 9  — Verify the bag           check message counts per topic
+Phase 10 — Export to CSV + frames   convert bag to ML files
+Phase 11 — Verify exported data     check files, sizes, trajectory
+Phase 12 — ML readiness check       final validation
 ```
 
-> ⚠️ **Run phases in order. Do not skip ahead.** Starting the recording before Unity is playing will produce empty CSV files.
+> ⚠️ **Run phases in order. Do not skip ahead.**
 
 ---
 
 ## Phase 0 — Clean Start
 
-Stop and restart all Docker containers.
-
 ```bash
-# Stop everything
 docker compose -f docker-compose-ros2.yml down
-
-# Start fresh
 docker compose -f docker-compose-ros2.yml up -d
-
-# Watch all containers start
 docker compose -f docker-compose-ros2.yml logs -f
 ```
 
-Wait until you see **all five** of these messages before continuing:
+Wait until you see **all five** of these:
 
 ```
 ✓ Starting ROS TCP Bridge on 0.0.0.0:10000
@@ -56,15 +51,11 @@ Wait until you see **all five** of these messages before continuing:
 ✓ Starting Image Bridge
 ```
 
-> 💡 Ctrl+C to stop watching logs once you see all five. The containers keep running in the background.
+> 💡 Ctrl+C to stop watching logs. Containers keep running.
 
 ---
 
-## Phase 1 — Verify Occupancy Grid
-
-Static buoys only — Unity not connected yet.
-
-Before starting Unity, verify the occupancy grid server is running and the static buoys appear.
+## Phase 1 — Verify Occupancy Grid (no Unity yet)
 
 ```bash
 docker exec -it n3mo_grid bash -c "
@@ -75,29 +66,29 @@ docker exec -it n3mo_grid bash -c "
 "
 ```
 
-Expected — 39 occupied cells (3 buoys × 13 cells each):
+Expected — 39 occupied cells (3 buoys × 13 cells):
 
 ```
 ✓ Map size    : 1000x1000 cells
-✓ Occupied    : 39  (value=100)
-✓ Free        : 999961  (value=0)
+✓ Occupied    : 39
+✓ Free        : 999961
 ```
 
-Open the browser map. You should see 3 cyan dot clusters (the buoys). No moving dot yet.
+Open browser map — should show 3 cyan dot clusters:
 
 ```
 http://localhost:8080
 ```
 
-> ⚠️ If Occupied shows 0 — the occupancy grid server is not running. Check: `docker logs n3mo_grid`
+> ⚠️ If Occupied shows 0 — check `docker logs n3mo_grid`
 
 ---
 
-## Phase 2 — Connect Unity
+## Phase 2 — Connect Unity and Move Boat
 
-Hit **Play** in Unity. Wait 3 seconds for the ROS TCP connection to establish.
+Hit **Play** in Unity. Wait 3 seconds.
 
-### Verify Unity is connected
+### Verify Unity connected
 
 ```bash
 docker exec -it n3mo_bridge bash -c "
@@ -112,25 +103,30 @@ docker exec -it n3mo_bridge bash -c "
 ✓ average rate: ~2.0
 ```
 
-### Verify grid updated with sailboat
+### Verify Unity Console shows all components found
 
-Run the grid checker again. Occupied should now be 52:
+In the Unity Console you should see:
 
 ```
-✓ Occupied    : 52  (value=100)   ← 39 buoys + 13 sailboat
+✓ [SceneLoader] Loaded 4 objects from: .../scene_config.json
+✓ [SceneLoader] Runtime weather installed.
+✓ [PhysicsController] 'sailboat_01' ready
+✓ [CameraStreamer] Publishing 320x240 @ 10fps → /unity/camera/compressed
+✓ [EnvironmentController] components found:
+    WaterSurface     : Ocean
+    WeatherController: RuntimeWeather
+    DayNightCycle    : RuntimeWeather
+✓ [MapGenerator] Starting map generation...
+✓ [MapGenerator] Map generated: Grid : 1000x1000 cells
+✓ [MapGenerator] Published /map → 1000x1000 resolution=1m/cell
+✓ [MapGenerator] Saved map.pgm (1000x1000)
+✓ [MapGenerator] Saved map.yaml
+✓ [MapGenerator] Map saved to: .../recordings/map_<timestamp>
 ```
 
-The browser map at `http://localhost:8080` should now show 4 dot clusters: 3 static buoys + 1 sailboat.
+### Start the boat moving in circles
 
-> ⚠️ If `/unity/all_poses` shows no rate — Unity is not connected. Check the Unity Console for connection errors.
-
-> 💡 If connection fails on Mac: `docker compose -f docker-compose-ros2.yml down && docker compose -f docker-compose-ros2.yml up -d` then hit Play again.
-
----
-
-## Phase 3 — Start Pose Publisher
-
-Open a **new terminal** and run the pose publisher. The sailboat will start moving in a 50m radius circle centred at (0, -300).
+Open a **new terminal** and run:
 
 ```bash
 docker exec -it n3mo_bridge bash -c "
@@ -144,15 +140,282 @@ docker exec -it n3mo_bridge bash -c "
 "
 ```
 
-Watch the browser map — the sailboat dot should start moving in a circle. **Wait 5 seconds** to let it settle before recording.
+### Verify boat appears and moves on the grid
 
-> 💡 For a figure-8 instead: `-p scenario:=eight`
+Run the grid checker again:
+
+```bash
+docker exec -it n3mo_grid bash -c "
+  source /opt/ros/humble/setup.bash &&
+  source /root/ros2_ws/install/setup.bash &&
+  export AMENT_PREFIX_PATH=/root/ros2_ws/install/n3mo_control:/root/ros2_ws/install/ros_tcp_endpoint:\$AMENT_PREFIX_PATH &&
+  ros2 run n3mo_control grid_checker
+"
+```
+
+```
+✓ Occupied : 52  (39 buoys + 13 sailboat)
+```
+
+Watch `http://localhost:8080` — you should now see **4 dot clusters**, with the sailboat dot moving in a circle around the 3 static buoy dots.
+
+> 💡 Keep the waypoint publisher running while you continue through the phases — it keeps the boat moving so you can watch it on the map.
 
 ---
 
-## Phase 4 — Verify Camera
+## Phase 3 — Verify Static Nav Map
 
-Confirm frames are flowing at ~10Hz.
+### Check ROS2 topic
+
+```bash
+docker exec -it n3mo_bridge bash -c "
+  source /opt/ros/humble/setup.bash &&
+  ros2 topic info /map
+"
+```
+
+Expected:
+
+```
+✓ Type: nav_msgs/msg/OccupancyGrid
+✓ Publisher count: 1
+```
+
+### Open the saved map file
+
+```bash
+open ~/Dev/n3mo/N3moSim/recordings/$(ls -t ~/Dev/n3mo/N3moSim/recordings/ | grep map | head -1)/map.pgm
+```
+
+What you should see in Preview:
+
+```
+White area  = open water (navigable)
+Black shape = island / land (occupied)
+```
+
+The map is the standard ROS2 Nav2 format and can be loaded directly by any path planner:
+
+```bash
+ros2 run nav2_map_server map_server --ros-args \
+  -p yaml_filename:=recordings/map_<timestamp>/map.yaml
+```
+
+> ⚠️ If map.pgm is not found — check Unity Console for the exact save path in `[MapGenerator] Map saved to:`
+
+---
+
+## Phase 4 — Environment Control
+
+All environment commands run inside the Docker container. Make sure Unity is in Play mode before running these.
+
+### 4a — Weather presets
+
+Test each preset and observe the Game view change:
+
+**Clear (baseline):**
+```bash
+docker exec -it n3mo_bridge bash -c "
+  source /opt/ros/humble/setup.bash &&
+  source /root/ros2_ws/install/setup.bash &&
+  export AMENT_PREFIX_PATH=/root/ros2_ws/install/n3mo_control:/root/ros2_ws/install/ros_tcp_endpoint:\$AMENT_PREFIX_PATH &&
+  ros2 run n3mo_control environment_publisher --ros-args \
+    -p mode:=preset -p preset_name:=clear
+"
+```
+
+**Misty (dense sea fog):**
+```bash
+docker exec -it n3mo_bridge bash -c "
+  source /opt/ros/humble/setup.bash &&
+  source /root/ros2_ws/install/setup.bash &&
+  export AMENT_PREFIX_PATH=/root/ros2_ws/install/n3mo_control:/root/ros2_ws/install/ros_tcp_endpoint:\$AMENT_PREFIX_PATH &&
+  ros2 run n3mo_control environment_publisher --ros-args \
+    -p mode:=preset -p preset_name:=misty
+"
+```
+
+**Rainy (overcast + rain):**
+```bash
+docker exec -it n3mo_bridge bash -c "
+  source /opt/ros/humble/setup.bash &&
+  source /root/ros2_ws/install/setup.bash &&
+  export AMENT_PREFIX_PATH=/root/ros2_ws/install/n3mo_control:/root/ros2_ws/install/ros_tcp_endpoint:\$AMENT_PREFIX_PATH &&
+  ros2 run n3mo_control environment_publisher --ros-args \
+    -p mode:=preset -p preset_name:=rainy
+"
+```
+
+**Stormy (severe weather):**
+```bash
+docker exec -it n3mo_bridge bash -c "
+  source /opt/ros/humble/setup.bash &&
+  source /root/ros2_ws/install/setup.bash &&
+  export AMENT_PREFIX_PATH=/root/ros2_ws/install/n3mo_control:/root/ros2_ws/install/ros_tcp_endpoint:\$AMENT_PREFIX_PATH &&
+  ros2 run n3mo_control environment_publisher --ros-args \
+    -p mode:=preset -p preset_name:=stormy
+"
+```
+
+In the Unity Console you should see for each:
+```
+✓ [EnvironmentController] preset → Clear/Misty/Rainy/Stormy
+✓ [SimpleWeatherController] applied preset: Clear/Misty/Rainy/Stormy
+```
+
+### 4b — Time of day
+
+**Night (22:00):**
+```bash
+docker exec -it n3mo_bridge bash -c "
+  source /opt/ros/humble/setup.bash &&
+  source /root/ros2_ws/install/setup.bash &&
+  export AMENT_PREFIX_PATH=/root/ros2_ws/install/n3mo_control:/root/ros2_ws/install/ros_tcp_endpoint:\$AMENT_PREFIX_PATH &&
+  ros2 run n3mo_control environment_publisher --ros-args \
+    -p mode:=manual -p time_of_day:=22.0 -p instant:=true
+"
+```
+
+Game view should go dark.
+
+**Early morning (08:00):**
+```bash
+docker exec -it n3mo_bridge bash -c "
+  source /opt/ros/humble/setup.bash &&
+  source /root/ros2_ws/install/setup.bash &&
+  export AMENT_PREFIX_PATH=/root/ros2_ws/install/n3mo_control:/root/ros2_ws/install/ros_tcp_endpoint:\$AMENT_PREFIX_PATH &&
+  ros2 run n3mo_control environment_publisher --ros-args \
+    -p mode:=manual -p time_of_day:=8.0 -p instant:=true
+"
+```
+
+Golden early morning light.
+
+**Noon (12:00):**
+```bash
+docker exec -it n3mo_bridge bash -c "
+  source /opt/ros/humble/setup.bash &&
+  source /root/ros2_ws/install/setup.bash &&
+  export AMENT_PREFIX_PATH=/root/ros2_ws/install/n3mo_control:/root/ros2_ws/install/ros_tcp_endpoint:\$AMENT_PREFIX_PATH &&
+  ros2 run n3mo_control environment_publisher --ros-args \
+    -p mode:=manual -p time_of_day:=12.0 -p instant:=true
+"
+```
+
+**Sunset (17:00):**
+```bash
+docker exec -it n3mo_bridge bash -c "
+  source /opt/ros/humble/setup.bash &&
+  source /root/ros2_ws/install/setup.bash &&
+  export AMENT_PREFIX_PATH=/root/ros2_ws/install/n3mo_control:/root/ros2_ws/install/ros_tcp_endpoint:\$AMENT_PREFIX_PATH &&
+  ros2 run n3mo_control environment_publisher --ros-args \
+    -p mode:=manual -p time_of_day:=17.0 -p instant:=true
+"
+```
+
+In the Unity Console and RuntimeWeather Inspector you should see `Time Of Day` slider update to the set value.
+
+**Cycle day/night automatically:**
+```bash
+docker exec -it n3mo_bridge bash -c "
+  source /opt/ros/humble/setup.bash &&
+  source /root/ros2_ws/install/setup.bash &&
+  export AMENT_PREFIX_PATH=/root/ros2_ws/install/n3mo_control:/root/ros2_ws/install/ros_tcp_endpoint:\$AMENT_PREFIX_PATH &&
+  ros2 run n3mo_control environment_publisher --ros-args \
+    -p mode:=cycle -p cycle_speed:=2.0
+"
+```
+
+Watch the lighting shift continuously. Ctrl+C to stop.
+
+### 4c — Wave height
+
+**Calm seas (0.5m):**
+```bash
+docker exec -it n3mo_bridge bash -c "
+  source /opt/ros/humble/setup.bash &&
+  source /root/ros2_ws/install/setup.bash &&
+  export AMENT_PREFIX_PATH=/root/ros2_ws/install/n3mo_control:/root/ros2_ws/install/ros_tcp_endpoint:\$AMENT_PREFIX_PATH &&
+  ros2 run n3mo_control environment_publisher --ros-args \
+    -p mode:=manual -p wave_height:=0.5 -p time_of_day:=12.0 -p instant:=true
+"
+```
+
+Click `Ocean` in the Unity Hierarchy — `Time Multiplier` should be ~0.6.
+
+**Rough seas (5.0m):**
+```bash
+docker exec -it n3mo_bridge bash -c "
+  source /opt/ros/humble/setup.bash &&
+  source /root/ros2_ws/install/setup.bash &&
+  export AMENT_PREFIX_PATH=/root/ros2_ws/install/n3mo_control:/root/ros2_ws/install/ros_tcp_endpoint:\$AMENT_PREFIX_PATH &&
+  ros2 run n3mo_control environment_publisher --ros-args \
+    -p mode:=manual -p wave_height:=5.0 -p time_of_day:=12.0 -p instant:=true
+"
+```
+
+`Time Multiplier` should jump to 3.0 and waves visibly animate faster.
+
+**Gradual storm build:**
+```bash
+docker exec -it n3mo_bridge bash -c "
+  source /opt/ros/humble/setup.bash &&
+  source /root/ros2_ws/install/setup.bash &&
+  export AMENT_PREFIX_PATH=/root/ros2_ws/install/n3mo_control:/root/ros2_ws/install/ros_tcp_endpoint:\$AMENT_PREFIX_PATH &&
+  ros2 run n3mo_control environment_publisher --ros-args \
+    -p mode:=storm
+"
+```
+
+After ~18 seconds you should see `Storm reached 30% — applying Stormy preset` in the Docker logs and the scene darken.
+
+### 4d — Reset to default
+
+After testing, reset to noon clear before continuing:
+
+```bash
+docker exec -it n3mo_bridge bash -c "
+  source /opt/ros/humble/setup.bash &&
+  source /root/ros2_ws/install/setup.bash &&
+  export AMENT_PREFIX_PATH=/root/ros2_ws/install/n3mo_control:/root/ros2_ws/install/ros_tcp_endpoint:\$AMENT_PREFIX_PATH &&
+  ros2 run n3mo_control environment_publisher --ros-args \
+    -p mode:=manual \
+    -p time_of_day:=12.0 \
+    -p wave_height:=0.5 \
+    -p instant:=true
+" && \
+docker exec -it n3mo_bridge bash -c "
+  source /opt/ros/humble/setup.bash &&
+  source /root/ros2_ws/install/setup.bash &&
+  export AMENT_PREFIX_PATH=/root/ros2_ws/install/n3mo_control:/root/ros2_ws/install/ros_tcp_endpoint:\$AMENT_PREFIX_PATH &&
+  ros2 run n3mo_control environment_publisher --ros-args \
+    -p mode:=preset -p preset_name:=clear
+"
+```
+
+---
+
+## Phase 5 — Start Pose Publisher (for recording)
+
+Stop the waypoint publisher from Phase 2 with Ctrl+C, then start the pose publisher for precise circle recording:
+
+```bash
+docker exec -it n3mo_bridge bash -c "
+  source /opt/ros/humble/setup.bash &&
+  source /root/ros2_ws/install/setup.bash &&
+  export AMENT_PREFIX_PATH=/root/ros2_ws/install/n3mo_control:/root/ros2_ws/install/ros_tcp_endpoint:\$AMENT_PREFIX_PATH &&
+  ros2 run n3mo_control pose_publisher --ros-args \
+    -p scenario:=circle \
+    -p radius:=50.0 \
+    -p speed:=0.3
+"
+```
+
+Watch browser map — sailboat dot should move in a clean circle. **Wait 5 seconds** to let it settle before recording.
+
+---
+
+## Phase 6 — Verify Camera
 
 ```bash
 docker exec -it n3mo_bridge bash -c "
@@ -167,38 +430,31 @@ docker exec -it n3mo_bridge bash -c "
 ✓ average rate: ~8-10
 ```
 
-Check the live preview frame:
-
+Check live frame:
 ```bash
 open recordings/latest_frame.jpg
 ```
 
-Should show a 320x240 ocean view from the bow of the sailboat. The file updates every 3 seconds so the view changes as the boat rotates.
-
-> ⚠️ If `/camera/compressed` shows 0 — the `CameraStreamer` component is missing from `StreamCamera` in Unity, or Unity is not in Play mode.
+Should show 320x240 ocean view from the bow.
 
 ---
 
-## Phase 5 — Start Recording
-
-Start the recording in a **new terminal**.
+## Phase 7 — Start Recording
 
 ```bash
 ./scripts/record.sh
 ```
 
 ```
-✓ Starting recording: session_2026_05_04_XXXXXX
+✓ Starting recording: session_2026_XX_XX_XXXXXX
 ✓ Recording started
 ```
 
-Let it run for **at least 60 seconds** to capture one full circle. Watch the browser map throughout — the dot should be moving continuously.
-
-> 💡 The longer you record, the more training data you collect. A 10-minute session at 10fps = ~6000 camera frames.
+Record for **at least 60 seconds**. Watch browser map — dot should be moving throughout.
 
 ---
 
-## Phase 6 — Stop Recording
+## Phase 8 — Stop Recording
 
 ```bash
 ./scripts/stop_record.sh
@@ -208,13 +464,9 @@ Let it run for **at least 60 seconds** to capture one full circle. Watch the bro
 ✓ Recording stopped.
 ```
 
-> ⚠️ Always use `stop_record.sh` to stop. Killing the container without stopping cleanly can corrupt the `.db3` file.
-
 ---
 
-## Phase 7 — Verify the Bag
-
-Check all 8 topics were captured with correct rates.
+## Phase 9 — Verify the Bag
 
 ```bash
 SESSION=$(ls recordings/ | grep session | grep -v '.gitkeep' | tail -1)
@@ -226,24 +478,18 @@ docker exec -it n3mo_bridge bash -c "
 "
 ```
 
-Expected message counts for a 60-second recording:
+Expected for a 60-second recording:
 
-| Topic | Expected | Rate | If 0 |
-|---|---|---|---|
-| `/camera/compressed` | ~480 msgs | 8Hz × 60s | Camera not streaming |
-| `/sailboat_01/pose` | ~600 msgs | 10Hz × 60s | Pose publisher not running |
-| `/sailboat_01/cmd_vel` | ~600 msgs | 10Hz × 60s | n3mo_controller down |
-| `/sailboat/gps` | ~600 msgs | 10Hz × 60s | sensor_publisher down |
-| `/sailboat/imu` | ~600 msgs | 10Hz × 60s | sensor_publisher down |
-| `/environment/wind` | ~600 msgs | 10Hz × 60s | sensor_publisher down |
-| `/unity/all_poses` | ~120 msgs | 2Hz × 60s | Unity not connected |
-| `/occupancy_grid` | ~60 msgs | 1Hz × 60s | grid server down |
+| Topic | Expected | Rate |
+|---|---|---|
+| `/camera/compressed` | ~480 msgs | 8Hz |
+| `/sailboat_01/pose` | ~600 msgs | 10Hz |
+| `/unity/all_poses` | ~120 msgs | 2Hz |
+| `/occupancy_grid` | ~60 msgs | 1Hz |
 
 ---
 
-## Phase 8 — Export to CSV and Frames
-
-Convert the bag to ML-ready files.
+## Phase 10 — Export to CSV and Frames
 
 ```bash
 SESSION=$(ls recordings/ | grep session | grep -v '.gitkeep' | tail -1)
@@ -254,30 +500,21 @@ docker exec -it n3mo_bridge bash -c "
 "
 ```
 
-Expected output:
-
-```
-✓ Frames extracted: NNN
-✓ dataset.csv (NNN rows — ML ready)
-```
-
 Output files in `recordings/session_NAME/`:
 
-| File | Contents | Used for |
-|---|---|---|
-| `poses.csv` | Vessel positions over time | Trajectory analysis |
-| `commands.csv` | Velocity commands issued | Command analysis |
-| `gps.csv` | GPS coordinates over time | Geographic track |
-| `wind.csv` | Wind speed and direction | Environment data |
-| `grid_stats.csv` | Occupied cell counts over time | Grid consistency check |
-| `frames/` | JPEG camera frames (000001.jpg...) | ML training images |
-| `dataset.csv` | Frames aligned with pose + command | **Primary ML dataset** |
+| File | Contents |
+|---|---|
+| `poses.csv` | Vessel positions over time |
+| `commands.csv` | Velocity commands issued |
+| `gps.csv` | GPS coordinates |
+| `wind.csv` | Wind data |
+| `grid_stats.csv` | Occupied cell counts |
+| `frames/` | JPEG camera frames |
+| `dataset.csv` | Frames aligned with pose + command (primary ML dataset) |
 
 ---
 
-## Phase 9 — Verify Exported Data
-
-Run this full verification script on your Mac.
+## Phase 11 — Verify Exported Data
 
 ```bash
 SESSION=$(ls recordings/ | grep session | grep -v '.gitkeep' | tail -1)
@@ -292,10 +529,6 @@ echo "=== DATASET HEADERS ==="
 head -2 ${BASE}/dataset.csv
 
 echo ""
-echo "=== COMMANDS — check variety ==="
-awk -F',' 'NR>1 {print $3, $8}' ${BASE}/commands.csv | sort | uniq -c | sort -rn | head -5
-
-echo ""
 echo "=== TRAJECTORY COVERAGE ==="
 python3 << PYEOF
 import csv
@@ -306,44 +539,13 @@ zs = [float(r['pos_z']) for r in rows if r['pose_index'] == '0']
 if xs:
     print(f'X range: {min(xs):.1f} to {max(xs):.1f}  (span {max(xs)-min(xs):.1f}m)')
     print(f'Z range: {min(zs):.1f} to {max(zs):.1f}  (span {max(zs)-min(zs):.1f}m)')
-    print(f'Centre X: {(max(xs)+min(xs))/2:.1f}  (should be ~0)')
-    print(f'Centre Z: {(max(zs)+min(zs))/2:.1f}  (should be ~-300)')
     print(f'Radius:   {(max(xs)-min(xs))/2:.1f}m  (should be ~50)')
 PYEOF
-
-echo ""
-echo "=== GRID STATS — occupied cells constant? ==="
-awk -F',' 'NR>1 {print $5}' ${BASE}/grid_stats.csv | sort | uniq -c
-
-echo ""
-echo "=== OPEN FIRST AND LAST FRAMES ==="
-open ${BASE}/frames/000001.jpg
-LAST=$(ls ${BASE}/frames/ | tail -1)
-open ${BASE}/frames/${LAST}
 ```
-
-What good output looks like:
-
-```
-Commands:     ~480 2.0000 0.3000  (circle) + a few 0.0000 0.0000 (normal)
-Grid stats:   52 in every row = 3 buoys + sailboat, consistent throughout
-Frames:       first and last both show ocean view from the bow
-
-Trajectory:
-  X range: -50.0 to 50.0  (span 100.0m)
-  Z range: -350.0 to -250.0  (span 100.0m)
-  Centre X: 0.0   ✓
-  Centre Z: -300.0   ✓
-  Radius:   50.0m   ✓
-```
-
-> ⚠️ If grid_stats shows 39 in early rows — those are from before Unity connected. This is normal.
 
 ---
 
-## Phase 10 — ML Readiness Check
-
-Final validation that the dataset is complete and usable.
+## Phase 12 — ML Readiness Check
 
 ```bash
 SESSION=$(ls recordings/ | grep session | grep -v '.gitkeep' | tail -1)
@@ -351,26 +553,15 @@ BASE="recordings/${SESSION}"
 
 python3 << EOF
 import csv, os
-
 base = "${BASE}"
-
 with open(f'{base}/dataset.csv') as f:
     rows = list(csv.DictReader(f))
-
 print(f'Total training samples : {len(rows)}')
-print(f'At 10fps that covers   : {len(rows)/10:.1f} seconds of footage')
-
+print(f'Coverage               : {len(rows)/10:.1f} seconds')
 missing = [r for r in rows if not os.path.exists(f'{base}/{r["frame_file"]}')]
 print(f'Missing frames         : {len(missing)}  (should be 0)')
-
-linears  = [float(r['linear_x'])  for r in rows]
-angulars = [float(r['angular_z']) for r in rows]
-print(f'linear_x range         : {min(linears):.2f} to {max(linears):.2f}')
-print(f'angular_z range        : {min(angulars):.2f} to {max(angulars):.2f}')
-
 pos_xs = set(r['pos_x'] for r in rows)
 print(f'Unique positions       : {len(pos_xs)}  (should be > 1)')
-
 print()
 if len(missing) == 0 and len(pos_xs) > 1:
     print('Dataset is ML ready!')
@@ -379,136 +570,71 @@ else:
 EOF
 ```
 
-Expected output:
-
-```
-✓ Total training samples : 480+
-✓ Missing frames         : 0
-✓ Unique positions       : 100+
-✓ Dataset is ML ready!
-```
-
 ---
 
 ## Quick Checklist
 
-Use this before committing a session to training.
-
 ### Pre-recording
-- [ ] Docker containers started — all 5 services healthy in logs
-- [ ] Grid checker shows Occupied: 39 (buoys only, no Unity yet)
-- [ ] Browser map at http://localhost:8080 shows 3 cyan dot clusters
-- [ ] Unity hit Play — no connection errors in Console
+- [ ] Docker containers started — all 5 services healthy
+- [ ] Grid checker shows Occupied: 39 (buoys only, no Unity)
+- [ ] Browser map shows 3 cyan clusters at `http://localhost:8080`
+- [ ] Unity hit Play — no errors in Console
+- [ ] Unity Console shows `[MapGenerator] Map saved to: ...`
+- [ ] Map PGM opens and shows white ocean + black island
+- [ ] `/map` topic shows Publisher count: 1
+- [ ] Waypoint publisher running — boat moving in circles on browser map
 - [ ] Grid checker shows Occupied: 52 (buoys + sailboat)
-- [ ] Browser map shows 4 dot clusters including sailboat
-- [ ] Pose publisher running — sailboat moving in circle on map
+- [ ] Browser map shows 4 dot clusters with sailboat moving
+- [ ] Environment control tested — preset, time of day, wave height all responding
+- [ ] Reset to noon clear before recording
+- [ ] Pose publisher running (Phase 5) — sailboat moving in clean circle
 - [ ] `/camera/compressed` flowing at ~8-10Hz
-- [ ] `recordings/latest_frame.jpg` opens and shows ocean view
-
-### During recording
-- [ ] `record.sh` confirmed started with session timestamp
-- [ ] Browser map dot moving continuously for 60+ seconds
+- [ ] `latest_frame.jpg` shows ocean view
 
 ### Post-recording
 - [ ] `stop_record.sh` run cleanly
-- [ ] `ros2 bag info` shows all 8 topics with expected message counts
+- [ ] `ros2 bag info` shows all topics with expected message counts
 - [ ] `bag_to_csv.py` ran without errors
-- [ ] Frames folder contains expected number of JPEGs
+- [ ] Frames folder contains expected JPEGs
 - [ ] `dataset.csv` row count matches frame count
-- [ ] Trajectory coverage: centre ~(0, -300), radius ~50m
-- [ ] Grid stats: consistent 52 cells throughout
-- [ ] ML readiness check: 0 missing frames, unique positions > 1
-- [ ] `dataset.csv`: Dataset is ML ready!
+- [ ] ML readiness: 0 missing frames, unique positions > 1
+- [ ] `Dataset is ML ready!`
 
 ---
 
 ## Troubleshooting
 
-### Unity cannot connect to ROS bridge
-
-This happens on Mac after Docker restarts.
+### Unity can't connect
 
 ```bash
 docker compose -f docker-compose-ros2.yml down
 docker compose -f docker-compose-ros2.yml up -d
 ```
+Hit Play in Unity again.
 
-Then hit Play in Unity again. Wait 5 seconds before checking.
+### Map not saved / wrong path
+
+Check Unity Console for `[MapGenerator] Map saved to:` — this shows the exact path. If the path looks wrong (contains `Assets/../../`) update `SaveMapFiles()` in `MapGenerator.cs` to use a hardcoded absolute path.
+
+### Environment commands time out
+
+Check Unity Console for `[EnvironmentController] components found:` — if `WeatherController` or `DayNightCycle` shows `NOT FOUND`, RuntimeWeather didn't spawn in time. Stop and hit Play again.
+
+### Time of day changes but scene stays dark
+
+The sun goes below the horizon below hour 6 and above hour 18. Use values between 8-17 for visible daylight.
 
 ### Occupancy grid shows 0 occupied cells
 
 ```bash
-docker logs n3mo_grid | tail -20
+docker exec -it n3mo_bridge bash -c "source /opt/ros/humble/setup.bash && ros2 topic hz /unity/all_poses"
 ```
+Should show `average rate: 2.0`. If nothing — Unity isn't connected.
 
-You should see `Static obstacle: buoy_01 at cell (310, 390)`. If not, rebuild:
+### Boat not moving on browser map
 
-```bash
-docker compose -f docker-compose-ros2.yml build --no-cache
-```
+Check the waypoint publisher terminal — if it shows `[waypoint_publisher]` logs but the dot isn't moving, the PhysicsController may not be receiving the waypoints. Confirm `[PhysicsController] 'sailboat_01' ready` appears in the Unity Console.
 
-### Camera not flowing
+### Wave height doesn't change visually
 
-- Stop the game in Unity
-- Expand `sailboat_01 > CameraMount > StreamCamera` in Hierarchy
-- In the Inspector confirm `CameraStreamer (Script)` is listed
-- Hit Play again
-
-### Recording produces empty CSV files
-
-The recording ran but Unity was not playing or pose publisher was not running. Always verify Phase 2 and Phase 3 before Phase 5.
-
-### Sailboat not visible on browser map
-
-The sailboat is outside the grid bounds. Expand grid in `docker-compose-ros2.yml`:
-
-```
-ros2 run n3mo_control occupancy_grid_server --ros-args \
-  -p origin_x:=-500.0 -p origin_y:=-500.0 \
-  -p width_m:=1000.0 -p height_m:=1000.0
-```
-
----
-
-## How ML Uses This Dataset
-
-The `dataset.csv` is formatted for **imitation learning** — the model watches a scripted trajectory and learns to replicate it autonomously.
-
-### What each row contains
-
-| Column | Example | Meaning |
-|---|---|---|
-| `frame_file` | frames/000001.jpg | What the boat saw at this moment |
-| `pos_x, pos_z` | 11.77, -251.40 | Where the boat was in world space |
-| `rot_y, rot_w` | -0.118, 0.992 | What direction the boat was facing |
-| `linear_x` | 2.0 | Forward speed command issued |
-| `angular_z` | 0.3 | Turn rate command issued |
-
-### How a model trains on it
-
-Each row is one training sample. The model learns the mapping:
-- **Input:** camera frame (what the boat sees) + position + heading
-- **Output:** predict the correct `linear_x` and `angular_z` commands
-- Over thousands of samples it learns: open water → go forward, obstacle ahead → turn
-
-### Loading in Python
-
-```python
-import pandas as pd
-from PIL import Image
-import numpy as np
-
-df = pd.read_csv('recordings/session_NAME/dataset.csv')
-
-for _, row in df.iterrows():
-    # what the boat saw
-    image   = np.array(Image.open(f'recordings/session_NAME/{row["frame_file"]}')) / 255.0
-
-    # where the boat was and what direction it faced
-    state   = [row['pos_x'], row['pos_z'], row['rot_y'], row['rot_w']]
-
-    # what command was issued at that moment
-    command = [row['linear_x'], row['angular_z']]
-
-    # model.train(input=[image, state], label=command)
-```
+Wave height via `timeMultiplier` changes how fast waves animate, not their actual height (HDRP WaterSurface nested struct not accessible in Unity 6). Combine with weather presets for visual variety — Stormy preset gives darker sky and heavier-looking seas.

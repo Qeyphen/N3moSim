@@ -136,7 +136,6 @@ public class SceneLoader : MonoBehaviour
 
                 switch (controlMode)
                 {
-                    // Teleports boat to exact position received from ROS2.
                     case ControlMode.Pose:
 
                         if (rb != null)
@@ -157,9 +156,6 @@ public class SceneLoader : MonoBehaviour
                             case "catamaran":
                                 pose.rotationOffset = new Vector3(0f, 90f, 0f);
                                 break;
-                            case "buoy":
-                                pose.rotationOffset = Vector3.zero;
-                                break;
                             default:
                                 pose.rotationOffset = Vector3.zero;
                                 break;
@@ -169,8 +165,6 @@ public class SceneLoader : MonoBehaviour
                                   $"| rotationOffset: {pose.rotationOffset}");
                         break;
 
-                    // Moves boat using Twist (linear/angular velocity) commands.
-                    // Physics-based but command-driven, can drift over time.
                     case ControlMode.Velocity:
 
                         ROSController ros = spawned.AddComponent<ROSController>();
@@ -202,48 +196,49 @@ public class SceneLoader : MonoBehaviour
                         Debug.Log($"[SceneLoader] VELOCITY: {obj.id} ({obj.type}) → {obj.ros2_topic}");
                         break;
 
-                    // Moves boat toward a waypoint using real Unity forces.
-                    // Rigidbody handles acceleration, drag, momentum naturally.
-                    // Waypoints sent from waypoint_publisher.py via ROS2.
                     case ControlMode.Physics:
 
-                        PhysicsController phys = spawned.AddComponent<PhysicsController>();
-                        phys.waypointTopic     = $"/{obj.id}/waypoint";
-                        phys.poseTopic         = $"/{obj.id}/actual_pose";
-                        phys.objectId          = obj.id;
+                        SimpleController sc = spawned.AddComponent<SimpleController>();
+                        sc.waypointTopic    = $"/{obj.id}/waypoint";
+                        sc.poseTopic        = $"/{obj.id}/actual_pose";
+                        sc.objectId         = obj.id;
 
                         switch (obj.type.ToLower())
                         {
                             case "sailboat":
-                                phys.mass        = 800f;
-                                phys.linearDrag  = 3.0f;
-                                phys.angularDrag = 3.0f;
-                                phys.maxForce    = 4000f;
-                                phys.maxTorque   = 1000f;
-                                phys.maxSpeed    = 8f;
+                                sc.mass          = 800f;
+                                sc.linearDrag    = 0.5f;
+                                sc.angularDrag   = 5.0f;
+                                sc.maxForce      = 5000f;
+                                sc.maxTurnRate   = 0.8f;
+                                sc.maxSpeed      = 10f;
+                                sc.driveKp       = 2000f;
+                                sc.forwardOffset = new Vector3(0f, 180f, 0f);
                                 break;
                             case "catamaran":
-                                phys.mass        = 600f;
-                                phys.linearDrag  = 2.0f;
-                                phys.angularDrag = 2.5f;
-                                phys.maxForce    = 1400f;
-                                phys.maxTorque   = 700f;
-                                phys.maxSpeed    = 5f;
+                                sc.mass          = 600f;
+                                sc.linearDrag    = 0.5f;
+                                sc.angularDrag   = 5.0f;
+                                sc.maxForce      = 3000f;
+                                sc.maxTurnRate   = 0.8f;
+                                sc.maxSpeed      = 8f;
+                                sc.driveKp       = 1500f;
                                 break;
                             case "buoy":
-                                phys.mass        = 200f;
-                                phys.linearDrag  = 3.0f;
-                                phys.angularDrag = 4.0f;
-                                phys.maxForce    = 400f;
-                                phys.maxTorque   = 200f;
-                                phys.maxSpeed    = 2f;
+                                sc.mass          = 200f;
+                                sc.linearDrag    = 1.0f;
+                                sc.angularDrag   = 5.0f;
+                                sc.maxForce      = 800f;
+                                sc.maxTurnRate   = 0.5f;
+                                sc.maxSpeed      = 3f;
+                                sc.driveKp       = 800f;
                                 break;
                         }
 
                         Debug.Log($"[SceneLoader] PHYSICS: {obj.id} ({obj.type})" +
-                                  $" | waypoint: {phys.waypointTopic}" +
-                                  $" | mass: {phys.mass}kg" +
-                                  $" | drag: {phys.linearDrag}");
+                                  $" | waypoint: {sc.waypointTopic}" +
+                                  $" | mass: {sc.mass}kg" +
+                                  $" | drag: {sc.linearDrag}");
                         break;
                 }
 
@@ -264,30 +259,69 @@ public class SceneLoader : MonoBehaviour
                   $" Control mode: {controlMode}");
     }
 
+    // Searches all children recursively — handles CameraTarget nested
+    // anywhere inside the prefab hierarchy.
+    Transform FindDeepChild(Transform parent, string name)
+    {
+        foreach (Transform child in parent.GetComponentsInChildren<Transform>())
+            if (child.name == name) return child;
+        return null;
+    }
+
     void AssignCameraTarget(GameObject boat)
     {
         if (virtualCamera == null)
+            virtualCamera = FindFirstObjectByType<CinemachineVirtualCamera>();
+
+        if (virtualCamera == null)
         {
-            Debug.LogWarning("[SceneLoader] No CinemachineVirtualCamera found!");
+            Debug.LogError("[SceneLoader] No CinemachineVirtualCamera found!");
             return;
         }
 
-        Transform cameraTarget = boat.transform.Find("CameraTarget");
+        // Find CameraTarget anywhere in the prefab hierarchy
+        Transform target = FindDeepChild(boat.transform, "Sailboat_Sail_Baked_(Skin)");
 
-        if (cameraTarget == null)
+        if (target == null)
         {
+            // Not found — create one above the boat root
             GameObject ct = new GameObject("CameraTarget");
             ct.transform.SetParent(boat.transform);
             ct.transform.localPosition = new Vector3(0f, 5f, 0f);
-            cameraTarget = ct.transform;
-            Debug.Log("[SceneLoader] Created CameraTarget at Y+5 above boat");
+            target = ct.transform;
+            Debug.Log("[SceneLoader] CameraTarget not found — created at Y+5 above boat root");
         }
 
-        virtualCamera.Follow = cameraTarget;
-        virtualCamera.LookAt = cameraTarget;
+        // Assign follow and look-at targets
+        virtualCamera.Follow = target;
+        virtualCamera.LookAt = target;
+        virtualCamera.Priority = 1000;
+        virtualCamera.enabled = true;
 
-        Debug.Log($"[SceneLoader] Cinemachine → {boat.name} " +
-                  $"(target at world pos: {cameraTarget.position})");
+        // Transposer: offset relative to boat's local rotation
+        // -Z = always behind the bow regardless of heading or start position
+        var transposer = virtualCamera.GetCinemachineComponent<CinemachineTransposer>();
+        if (transposer == null)
+            transposer = virtualCamera.AddCinemachineComponent<CinemachineTransposer>();
+
+        transposer.m_FollowOffset = new Vector3(0f, 3f, -15f);
+        transposer.m_BindingMode  = CinemachineTransposer.BindingMode.LockToTargetWithWorldUp;
+        transposer.m_XDamping     = 1f;
+        transposer.m_YDamping     = 1f;
+        transposer.m_ZDamping     = 10f;
+
+        // Composer: look slightly above the target so we see the sail
+        var composer = virtualCamera.GetCinemachineComponent<CinemachineComposer>();
+        if (composer != null)
+            composer.m_TrackedObjectOffset = new Vector3(0f, 2f, 0f);
+
+        // Force Cinemachine to warp instantly to the boat on first frame
+        virtualCamera.OnTargetObjectWarped(
+            target, target.position - virtualCamera.transform.position);
+        virtualCamera.InternalUpdateCameraState(Vector3.up, Time.deltaTime);
+
+        Debug.Log($"[SceneLoader] Camera → {boat.name} | target: {target.name}" +
+                  $" | offset: (0, 3, -15) | LockToTargetWithWorldUp");
     }
 
     GameObject GetPrefab(string type)

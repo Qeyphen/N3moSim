@@ -27,17 +27,15 @@ namespace N3mo.Weather
 
         public void Configure(Volume volume, Light sunLight, SimpleRainController rain)
         {
-            globalVolume = volume;
-            directionalLight = sunLight;
-            rainController = rain;
+            globalVolume      = volume;
+            directionalLight  = sunLight;
+            rainController    = rain;
         }
 
         private void Start()
         {
             if (applyOnStart)
-            {
                 ApplyPreset(preset);
-            }
         }
 
         [ContextMenu("Apply Clear")]
@@ -58,7 +56,8 @@ namespace N3mo.Weather
 
             if (globalVolume == null || globalVolume.sharedProfile == null)
             {
-                Debug.LogWarning("SimpleWeatherController requires a global HDRP Volume with a shared profile.");
+                Debug.LogWarning("[SimpleWeatherController] requires a global " +
+                                 "HDRP Volume with a shared profile.");
                 return;
             }
 
@@ -68,35 +67,79 @@ namespace N3mo.Weather
 
             switch (preset)
             {
+                // ── CLEAR ─────────────────────────────────────────────────
+                // Bright sunny day, crisp horizon, no fog
                 case WeatherPreset.Clear:
-                    ApplyFog(fog, 100f, 500f, 2000f, new Color(0.78f, 0.91f, 1f), true);
-                    ApplySky(sky, new Color(0.29f, 0.36f, 0.44f), 0.8f);
+                    ApplyFog(fog,
+                        baseHeight:    100f,
+                        maxHeight:     500f,
+                        meanFreePath:  2000f,
+                        color:         new Color(0.78f, 0.91f, 1f),
+                        volumetric:    true);
+                    ApplySky(sky,
+                        groundTint:    new Color(0.29f, 0.36f, 0.44f),
+                        anisotropy:    0.8f);
                     ApplyExposure(exposure, 14f);
                     ApplySun(120000f, 6500f, Color.white);
                     ApplyRain(0f);
                     break;
+
+                // ── MISTY ─────────────────────────────────────────────────
+                // Dense sea fog, visibility reduced to ~100m
+                // Sun barely visible as a bright patch in the grey
                 case WeatherPreset.Misty:
-                    ApplyFog(fog, 40f, 250f, 900f, new Color(0.83f, 0.88f, 0.92f), true);
-                    ApplySky(sky, new Color(0.32f, 0.38f, 0.43f), 0.7f);
-                    ApplyExposure(exposure, 13.5f);
-                    ApplySun(90000f, 6200f, new Color(1f, 0.97f, 0.93f));
+                    ApplyFog(fog,
+                        baseHeight:    0f,
+                        maxHeight:     60f,
+                        meanFreePath:  80f,
+                        color:         new Color(0.88f, 0.90f, 0.92f),
+                        volumetric:    true);
+                    ApplySky(sky,
+                        groundTint:    new Color(0.75f, 0.78f, 0.80f),
+                        anisotropy:    0.5f);
+                    ApplyExposure(exposure, 12.5f);
+                    ApplySun(35000f, 6000f, new Color(1f, 0.98f, 0.95f));
                     ApplyRain(0f);
                     break;
+
+                // ── RAINY ─────────────────────────────────────────────────
+                // Overcast, heavy rain, low visibility
+                // Sky dark grey, sun heavily diffused
                 case WeatherPreset.Rainy:
-                    ApplyFog(fog, 20f, 180f, 450f, new Color(0.72f, 0.8f, 0.86f), true);
-                    ApplySky(sky, new Color(0.24f, 0.29f, 0.35f), 0.55f);
-                    ApplyExposure(exposure, 13f);
-                    ApplySun(50000f, 7000f, new Color(0.92f, 0.95f, 1f));
-                    ApplyRain(0.65f);
+                    ApplyFog(fog,
+                        baseHeight:    5f,
+                        maxHeight:     80f,
+                        meanFreePath:  150f,
+                        color:         new Color(0.60f, 0.65f, 0.70f),
+                        volumetric:    true);
+                    ApplySky(sky,
+                        groundTint:    new Color(0.18f, 0.22f, 0.28f),
+                        anisotropy:    0.4f);
+                    ApplyExposure(exposure, 11.5f);
+                    ApplySun(20000f, 7500f, new Color(0.80f, 0.85f, 1f));
+                    ApplyRain(1.0f);
                     break;
+
+                // ── STORMY ────────────────────────────────────────────────
+                // Very dark, severe weather, near zero visibility at distance
+                // Heavy rain, almost no sun
                 case WeatherPreset.Stormy:
-                    ApplyFog(fog, 10f, 140f, 250f, new Color(0.65f, 0.72f, 0.8f), true);
-                    ApplySky(sky, new Color(0.17f, 0.2f, 0.24f), 0.45f);
-                    ApplyExposure(exposure, 12.5f);
-                    ApplySun(25000f, 7500f, new Color(0.85f, 0.9f, 1f));
-                    ApplyRain(1f);
+                    ApplyFog(fog,
+                        baseHeight:    0f,
+                        maxHeight:     60f,
+                        meanFreePath:  80f,
+                        color:         new Color(0.45f, 0.50f, 0.55f),
+                        volumetric:    true);
+                    ApplySky(sky,
+                        groundTint:    new Color(0.10f, 0.12f, 0.16f),
+                        anisotropy:    0.35f);
+                    ApplyExposure(exposure, 10.5f);
+                    ApplySun(8000f, 8000f, new Color(0.70f, 0.75f, 0.90f));
+                    ApplyRain(1.0f);
                     break;
             }
+
+            Debug.Log($"[SimpleWeatherController] applied preset: {preset}");
         }
 
         public void ApplyPresetByName(string presetName)
@@ -143,63 +186,61 @@ namespace N3mo.Weather
             }
         }
 
-        private void ApplyFog(Fog fog, float baseHeightValue, float maximumHeightValue, float meanFreePathValue, Color albedoColor, bool volumetric)
+        private void ApplyFog(
+            Fog   fog,
+            float baseHeight,
+            float maxHeight,
+            float meanFreePath,
+            Color color,
+            bool  volumetric)
         {
-            if (fog == null)
-            {
-                return;
-            }
+            if (fog == null) return;
 
             fog.enabled.Override(true);
             fog.enableVolumetricFog.Override(volumetric);
-            fog.baseHeight.Override(baseHeightValue);
-            fog.maximumHeight.Override(maximumHeightValue);
-            fog.meanFreePath.Override(meanFreePathValue);
-            fog.albedo.Override(albedoColor);
+            fog.baseHeight.Override(baseHeight);
+            fog.maximumHeight.Override(maxHeight);
+            fog.meanFreePath.Override(meanFreePath);
+            fog.albedo.Override(color);
             fog.maxFogDistance.Override(5000f);
             fog.depthExtent.Override(64f);
         }
 
-        private void ApplySky(PhysicallyBasedSky sky, Color groundTintColor, float aerosolAnisotropyValue)
+        private void ApplySky(
+            PhysicallyBasedSky sky,
+            Color              groundTint,
+            float              anisotropy)
         {
-            if (sky == null)
-            {
-                return;
-            }
+            if (sky == null) return;
 
-            sky.groundTint.Override(groundTintColor);
-            sky.aerosolAnisotropy.Override(aerosolAnisotropyValue);
+            sky.groundTint.Override(groundTint);
+            sky.aerosolAnisotropy.Override(anisotropy);
         }
 
-        private void ApplyExposure(Exposure exposure, float fixedExposureValue)
+        private void ApplyExposure(Exposure exposure, float fixedExposure)
         {
-            if (exposure == null)
-            {
-                return;
-            }
+            if (exposure == null) return;
 
             exposure.mode.Override(ExposureMode.Fixed);
-            exposure.fixedExposure.Override(fixedExposureValue);
+            exposure.fixedExposure.Override(fixedExposure);
         }
 
-        private void ApplySun(float intensityLux, float colorTemperature, Color color)
+        private void ApplySun(
+            float intensityLux,
+            float colorTemperature,
+            Color color)
         {
-            if (directionalLight == null)
-            {
-                return;
-            }
+            if (directionalLight == null) return;
 
-            directionalLight.intensity = intensityLux;
+            directionalLight.intensity        = intensityLux;
             directionalLight.colorTemperature = colorTemperature;
-            directionalLight.color = color;
+            directionalLight.color            = color;
         }
 
         private void ApplyRain(float rainIntensity)
         {
             if (rainController != null)
-            {
                 rainController.Intensity = rainIntensity;
-            }
         }
     }
 }
