@@ -1,0 +1,75 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+        - /RobotModel1
+        - /TF1
+      Splitter Ratio: 0.5
+    Tree Height: 557
+  - Class: rviz_common/Views
+    Name: Views
+    Splitter Ratio: 0.5
+
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Cell Size: 0.5
+      Class: rviz_default_plugins/Grid
+      Color: 160; 160; 164
+      Enabled: true
+      Name: Grid
+      Plane: XY
+      Plane Cell Count: 30
+      Reference Frame: <Fixed Frame>
+      Value: true
+
+    - Alpha: 1
+      Class: rviz_default_plugins/RobotModel
+      Description Topic: /robot_description
+      Enabled: true
+      Name: RobotModel – N3mo_v2
+      Visual Enabled: true
+      Value: true
+
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Marker Scale: 0.6
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+      Value: true
+
+  Enabled: true
+  Global Options:
+    Background Color: 60; 60; 65
+    Fixed Frame: base_link
+    Frame Rate: 30
+
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/FocusCamera
+
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 18.0
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 2.0
+      Name: Current View
+      Near Clip Distance: 0.01
+      Pitch: 0.42
+      Target Frame: <Fixed Frame>
+      Yaw: 0.78
+
+Window Geometry:
+  Height: 900
+  Hide Left Dock: false
+  Hide Right Dock: false
+  Width: 1400

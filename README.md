@@ -1,633 +1,491 @@
-# N3moSim — Marine Autonomous Vessel Simulation
+# N3moSim
 
-![Unity](https://img.shields.io/badge/Unity-6.0-black?logo=unity)
-![HDRP](https://img.shields.io/badge/Render-HDRP-blue)
-![ROS2](https://img.shields.io/badge/ROS2-Humble-green)
-![Docker](https://img.shields.io/badge/Docker-Compose-blue?logo=docker)
-![License](https://img.shields.io/badge/License-MIT-yellow)
+Unity marine simulator with a ROS 2 bridge. Boats are spawned from a JSON scene,
+driven either manually (keyboard) or autonomously (toward a ROS target pose), and
+the scene is exposed to ROS 2 as an occupancy grid (`/map`).
 
-N3moSim is a marine simulation environment built in Unity HDRP for training and testing autonomous surface vessels. It provides a realistic ocean environment with dynamic and static objects controlled via ROS2 commands through a Docker-based ROS2 stack. Designed as a Remote Operation Center (ROC) demonstration platform, it supports camera image streaming, sensor telemetry, occupancy grid mapping, and multi-vessel autonomous scenario playback.
+On top of that, a **ROS scenario generator** procedurally populates the water with
+**moving traffic** (sailboats, swimmers, buoys, …) on `/sim/tracks`, which Unity renders
+and RViz visualizes. Unity's own `/map` is fed back to the generator as a **costmap**, so
+traffic spawns only in navigable water — a closed loop (see §10). This is the source of
+varied, auto-labeled obstacles for the perception dataset (§9).
+
+```
+Unity  ──TCP(10000)──►  ros_tcp_endpoint (Docker)  ──DDS──►  ROS 2 nodes / RViz / CLI
+```
+
+Unity never speaks ROS directly — it talks to the `ros_bridge` container, which is
+the real ROS 2 node that owns all publishers/subscribers.
 
 ---
 
-## Overview
+## 1. Prerequisites
 
-N3moSim simulates a realistic maritime environment where autonomous vessels navigate, avoid obstacles, and respond to environmental conditions such as wind and waves. The simulation is designed to stream high-quality sensor data (camera, GPS, IMU) to external systems and to receive real-time control commands from external ROS2 nodes. Object poses are fully driven by external ROS2 topics, making it straightforward to integrate with any ROS2-compatible controller, mission planner, or ML model.
-
-A live occupancy grid is generated from the scene and published continuously to `/occupancy_grid`, giving any external subscriber a real-time 2D map of all obstacles and vessels.
-
----
-
-## ✨ Features
-
-- **High Definition Marine Environment** — HDRP ocean with realistic waves, foam, volumetric fog, physically-based sky, and island terrain
-- **Dynamic Object Spawning** — Objects spawned at runtime from a shared JSON config file
-- **ROS2 Integration** — All vessels controlled via ROS2 TCP bridge; pose fully defined through external ROS topics
-- **Pose Control Mode** — Exact position teleport via `PoseStamped` — perfect circles, zero physics drift
-- **Velocity Control Mode** — Physics-based movement via `Twist` commands
-- **Occupancy Grid** — Live 2D map of all obstacles published to `/occupancy_grid` at 1Hz
-- **Browser Map Visualiser** — Real-time occupancy grid viewer at `http://localhost:8080` — no rviz needed
-- **Camera Image Streaming** — Unity camera feed streamed out as binary or base64 JPEG via WebSocket
-- **Sensor Telemetry** — GPS, IMU and wind data published to ROS2 network
-- **Static & Dynamic Objects** — Objects can be static (fixed position) or dynamic (ROS2 controlled)
-- **Configurable Scenarios** — Change entire scene setup by editing one JSON file
-- **Pre-built Demo Scenarios** — Circle, figure-8 and mixed trajectory scenarios for demonstration
-- **Realistic Weather** — Sun, fog, rain and time-of-day control via Volume system
-- **Docker ROS2 Stack** — Full ROS2 environment containerized with Docker Compose
-- **Multi-Object Control** — Each dynamic object gets a unique ROS2 topic for independent control
-- **Shared Config** — Single `scene_config.json` used by both Unity and all ROS2 nodes
+- **Docker** (Docker Desktop on macOS, Docker Engine on Linux).
+- **Unity** with the project open (ROS-TCP-Connector package already included).
+- The Unity **ROSConnectionPrefab** in the scene, pointing at `127.0.0.1` port `10000`.
 
 ---
 
-## Architecture
-
-### Scene Population
-
-```
-scene_config.json (shared root config)
-        ↓ read by both
-Unity SceneLoader.cs              ROS2 n3mo_controller.py
-        ↓                                  ↓
-Spawns objects at runtime          Creates unique publisher
-Attaches PoseController            per dynamic object
-or ROSController per object
-```
-
-### Control Modes
-
-**Pose Control (default, recommended)**
-```
-pose_publisher.py → /sailboat_01/pose (PoseStamped)
-                          ↓
-                  Unity PoseController.cs
-                  teleports to exact position
-                  no physics drift, perfect circles
-```
-
-**Velocity Control**
-```
-trajectory_publisher.py → /mission/{id}/cmd_vel (Twist)
-                                ↓
-                        n3mo_controller.py
-                                ↓
-                        /{id}/cmd_vel → Unity
-                        ROSController.cs applies physics force
-```
-
-### Occupancy Grid Pipeline
-
-```
-Unity (playing)
-  └── OccupancyGridPublisher.cs
-        sends live object positions → /unity/all_poses @ 2Hz
-                    ↓
-        occupancy_grid_server.py
-          ├── static obstacles from scene_config.json
-          ├── live poses from /unity/all_poses
-          └── publishes /occupancy_grid @ 1Hz
-                    ↓
-        grid_visualiser.py → http://localhost:8080
-        any external subscriber (path planner, ML agent)
-```
-
-### Multi-Object Control
-
-```
-n3mo_controller
-  ├── /sailboat_01/cmd_vel   → sailboat_01 moves independently
-  ├── /catamaran_01/cmd_vel  → catamaran_01 moves independently
-  ├── /catamaran_02/cmd_vel  → catamaran_02 moves independently
-  └── /buoy_03/cmd_vel       → buoy_03 moves independently
-```
-
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- Unity 6.0 or later with HDRP
-- Docker Desktop
-- Mac / Linux (Windows via WSL2)
-
-### Installation
-
-#### 1. Clone the repository
+## 2. Start / stop the ROS side (Docker)
 
 ```bash
-git clone https://github.com/Qeyphen/N3moSim.git
-cd N3moSim
+docker compose build          # first time, or after editing the Dockerfile / ROS package
+docker compose up -d          # start the bridge (port 10000)
+docker compose ps             # check it's running
+docker compose logs -f ros_bridge   # follow bridge logs
+docker compose down           # stop everything
 ```
 
-#### 2. Open Unity Project
+Then press **Play** in Unity. The bridge and Unity connect automatically.
 
-1. Open **Unity Hub**
-2. Click **"Add project from disk"**
-3. Select the **N3moSim** folder
-4. Open with **Unity 6.0+**
-
-#### 3. Install ROS TCP Connector in Unity
-
-1. **Window → Package Manager**
-2. Click **"+"** → **"Add package from git URL"**
-3. Paste:
-
-```
-https://github.com/Unity-Technologies/ROS-TCP-Connector.git?path=/com.unity.robotics.ros-tcp-connector
-```
-
-#### 4. Configure Unity ROS Settings
-
-1. **Robotics → ROS Settings**
-2. Set:
-
-| Setting            | Value       |
-| ------------------ | ----------- |
-| Protocol           | ROS2        |
-| ROS IP Address     | `127.0.0.1` |
-| Port               | `10000`     |
-| Connect on Startup | ✅ Enabled  |
-
-#### 5. Configure SceneManager in Unity
-
-1. In the Hierarchy select **SceneManager**
-2. In the Inspector confirm these are assigned:
-
-| Slot              | Value              |
-| ----------------- | ------------------ |
-| Sailboat Prefab   | Sailboat prefab    |
-| Buoy Prefab       | Buoy prefab        |
-| Catamaran Prefab  | Catamaran prefab   |
-| Virtual Camera    | Virtual Camera     |
-| Use Pose Control  | ✅ checked         |
-| Config File Name  | scene_config.json  |
-
-3. Also confirm **Occupancy Grid Publisher** component is attached to SceneManager
-
-#### 6. Build Docker ROS2 image
-
-```bash
-docker compose -f docker-compose-ros2.yml build --no-cache
-```
-
-#### 7. Start ROS2 services
-
-```bash
-docker compose -f docker-compose-ros2.yml up -d
-```
+> If you change the Python ROS node, rebuild it without a full image rebuild:
+> ```bash
+> docker compose exec ros_bridge bash -lc \
+>   "cd /root/ros2_ws && source /opt/ros/humble/setup.bash && colcon build --packages-select n3mo_control"
+> ```
 
 ---
 
-## 🎮 Running the Simulation
+## 3. Topics
 
-### Step 1 — Start ROS2 stack
+| Topic | Type | Direction | Notes |
+|---|---|---|---|
+| `/agent_01/target_pose` | `geometry_msgs/PoseStamped` | → Unity | goal for the boat; published on demand |
+| `/map` | `nav_msgs/OccupancyGrid` | Unity → | static obstacles (island + buoys); latched |
+| `/sim/tracks` | `n3_new_msgs/TrackArray` | ROS → Unity | procedural moving traffic (id/type/pose/vel); 10 Hz |
+| `/sim/tracks/markers` | `visualization_msgs/MarkerArray` | ROS → RViz | traffic as colored cubes |
+| `/sim/boat/pose` | `geometry_msgs/PoseStamped` | Unity → | ego boat pose; 10 Hz |
+| `/scene/objects` | `n3_new_msgs/TrackArray` | Unity → | ALL authored scene objects (ego + buoys): id/type/pose/vel; 10 Hz |
+| `/map/costmap_static` | `nav_msgs/OccupancyGrid` | — | the costmap the generator reads (= `/map`, remapped) |
+| `/env/time_of_day` | `std_msgs/Float32` | → Unity | set the hour 0–24 (sun angle + lighting) |
+| `/env/fog` | `std_msgs/Float32` | → Unity | fog / visibility, 0–1 |
+| `/env/wind` | `std_msgs/Float32` | → Unity | wind speed → sea state, 0–1 |
+| `/env/wave` | `std_msgs/Float32` | → Unity | wave height, 0–1 |
+| `/env/cloudiness` | `std_msgs/Float32` | → Unity | cloud cover, 0–1 |
+| `/env/rain` | `std_msgs/Float32` | → Unity | rain intensity, 0–1 |
+| `/env/weather` | `std_msgs/String` | → Unity | preset: clear/cloudy/overcast/foggy/stormy |
+| `/env/randomize` | `std_msgs/Int32` | → Unity | randomise conditions (0 = random seed, else seeded) |
+| `/env/state` | `std_msgs/String` | Unity → | current conditions as JSON (log per capture) |
 
-```bash
-docker compose -f docker-compose-ros2.yml up -d
-```
-
-### Step 2 — Wait for services to be ready
-
-```bash
-docker compose -f docker-compose-ros2.yml logs -f
-```
-
-Wait until you see:
-```
-OccupancyGridServer ready — 1000.0x1000.0m @ 1.0m/cell
-Starting Grid Visualiser on http://localhost:8080
-```
-
-### Step 3 — Press Play in Unity
-
-Objects spawn from config. Unity connects to ROS TCP Bridge on port 10000.
-
-### Step 4 — Verify connection
-
-```bash
-docker compose -f docker-compose-ros2.yml logs ros_bridge
-# Should show: New connection from 127.0.0.1
-```
-
-### Step 5 — Open the map visualiser
-
-Open your browser at:
-```
-http://localhost:8080
-```
-
-You will see a live top-down map showing all buoys and vessels as cyan dots updating in real time.
-
-### Step 6 — Run a demo scenario
-
-```bash
-# Circle trajectory
-docker exec -it n3mo_bridge bash -c "
-  source /opt/ros/humble/setup.bash &&
-  source /root/ros2_ws/install/setup.bash &&
-  ros2 run n3mo_control pose_publisher --ros-args -p scenario:=circle
-"
-
-# Figure-8 trajectory
-docker exec -it n3mo_bridge bash -c "
-  source /opt/ros/humble/setup.bash &&
-  source /root/ros2_ws/install/setup.bash &&
-  ros2 run n3mo_control pose_publisher --ros-args -p scenario:=eight
-"
-```
+**Coordinate conventions (important):**
+- Control channel (`target_pose`): `position.x` = Unity x, `position.z` = Unity z, `y = 0`.
+- Map layer (`/map`, dynamic obstacles): ROS ground plane = XY, so Unity x → ROS x,
+  **Unity z → ROS y**, ROS z = 0.
 
 ---
 
-## 🗺️ Occupancy Grid
+## 4. Send a target pose (autonomous control)
 
-The occupancy grid is a 2D map of the environment published continuously to `/occupancy_grid` as a `nav_msgs/OccupancyGrid` message.
-
-### Cell values
-
-| Value | Meaning  |
-| ----- | -------- |
-| `0`   | Free     |
-| `100` | Occupied |
-| `-1`  | Unknown  |
-
-### Default parameters
-
-| Parameter    | Default   | Description               |
-| ------------ | --------- | ------------------------- |
-| `resolution` | `1.0`     | Metres per cell           |
-| `width_m`    | `1000.0`  | Map width in metres       |
-| `height_m`   | `1000.0`  | Map height in metres      |
-| `origin_x`   | `-500.0`  | World X of cell (0,0)     |
-| `origin_y`   | `-500.0`  | World Z of cell (0,0)     |
-
-### Object radii (cells)
-
-| Object    | Radius | Cells marked |
-| --------- | ------ | ------------ |
-| Sailboat  | 3      | ~29          |
-| Catamaran | 4      | ~49          |
-| Buoy      | 2      | 13           |
-
-### Checking the grid
+Set `agent_01` to **Auto** (in `config/Scene.json` `"control_mode": "auto"`, or live in the
+boat's `BoatControlSwitcher` Inspector), then publish a target. `x`/`z` are Unity
+coordinates; the publisher sends once and exits.
 
 ```bash
-docker exec -it n3mo_grid bash -c "
-  source /opt/ros/humble/setup.bash &&
-  source /root/ros2_ws/install/setup.bash &&
-  export AMENT_PREFIX_PATH=/root/ros2_ws/install/n3mo_control:/root/ros2_ws/install/ros_tcp_endpoint:\$AMENT_PREFIX_PATH &&
-  ros2 run n3mo_control grid_checker
-"
+docker compose exec ros_bridge bash -lc \
+ "source /opt/ros/humble/setup.bash && source /root/ros2_ws/install/setup.bash && \
+  ros2 launch n3mo_control target_pose.launch.py x:=-190.0 z:=-110.0"
 ```
 
-Expected output with Unity playing:
+Other options:
+```bash
+# pick a different agent's topic
+docker compose exec ros_bridge bash -lc \
+ "source /opt/ros/humble/setup.bash && source /root/ros2_ws/install/setup.bash && \
+  ros2 launch n3mo_control target_pose.launch.py topic:=/agent_02/target_pose x:=10 z:=25"
+
+# run the node directly instead of the launch file
+docker compose exec ros_bridge bash -lc \
+ "source /opt/ros/humble/setup.bash && source /root/ros2_ws/install/setup.bash && \
+  ros2 run n3mo_control target_pose_publisher --ros-args -p x:=-190.0 -p z:=-110.0"
 ```
-Map size    : 1000x1000 cells
-Total cells : 1000000
-Occupied    : 52  (3 buoys + 1 sailboat)
-Free        : 999948
-```
 
-### Using the grid in an external node
-
-```python
-from nav_msgs.msg import OccupancyGrid
-
-def on_grid(self, msg):
-    w = msg.info.width
-
-    def is_safe(world_x, world_z):
-        cx  = int((world_x - msg.info.origin.position.x) / msg.info.resolution)
-        cy  = int((world_z - msg.info.origin.position.y) / msg.info.resolution)
-        idx = cy * w + cx
-        return msg.data[idx] == 0  # 0 = free, 100 = occupied
-
-    if is_safe(target_x, target_z):
-        self.set_mission('sailboat_01', 'forward')
-    else:
-        self.set_mission('sailboat_01', 'turn_left')
-```
+The boat turns toward the target, then thrusts; watch its `AutonomousBoatController.Status`
+in the Inspector cycle **Turning → Thrusting → Settled**.
 
 ---
 
-## ⚙️ Scene Configuration
+## 5. Inspect topics (CLI)
 
-Single config file at `N3moSim/config/scene_config.json` — used by both Unity and ROS2:
-
-```json
-{
-  "environment": {
-    "wind_speed": 5.0,
-    "wave_height": 1.5,
-    "time_of_day": "day"
-  },
-  "objects": [
-    {
-      "id": "sailboat_01",
-      "type": "Sailboat",
-      "dynamic": true,
-      "ros2_topic": "/sailboat_01/cmd_vel",
-      "position": [0, 1, -300],
-      "rotation": [0, 0, 0]
-    },
-    {
-      "id": "buoy_01",
-      "type": "Buoy",
-      "dynamic": false,
-      "position": [-190, 0, -110],
-      "rotation": [-90, 0, 0]
-    }
-  ]
-}
-```
-
-### Config fields
-
-| Field        | Type    | Description                                  |
-| ------------ | ------- | -------------------------------------------- |
-| `id`         | string  | Unique object identifier                     |
-| `type`       | string  | Prefab type: `Sailboat`, `Buoy`, `Catamaran` |
-| `dynamic`    | bool    | `true` = ROS2 controlled, `false` = static   |
-| `ros2_topic` | string  | Unique ROS2 topic per object                 |
-| `position`   | [x,y,z] | Spawn position in world space                |
-| `rotation`   | [x,y,z] | Spawn rotation in euler angles               |
-
----
-
-## 🎬 Demo Scenarios
-
-Three pre-built autonomous trajectory scenarios are included. Each runs without human input.
-
-| Scenario | File                    | Description                                  |
-| -------- | ----------------------- | -------------------------------------------- |
-| Circles  | `scenario_circles.json` | All vessels circle independently             |
-| Figure-8 | `scenario_eight.json`   | All vessels trace figure-8 paths             |
-| Mixed    | `scenario_mixed.json`   | Mix of circles and figure-8 — best for demo  |
-
-### Scenario config format
-
-```json
-{
-  "scenario": "mixed",
-  "description": "Mixed trajectories",
-  "objects": [
-    {
-      "id": "sailboat_01",
-      "trajectory": "circle",
-      "linear_x": 2.0,
-      "angular_z": 0.3,
-      "phase_offset": 0.0
-    },
-    {
-      "id": "catamaran_01",
-      "trajectory": "eight",
-      "linear_x": 2.5,
-      "angular_z_amplitude": 0.6,
-      "phase_offset": 0.0
-    }
-  ]
-}
-```
-
-| Field                 | Values              | Description                     |
-| --------------------- | ------------------- | ------------------------------- |
-| `trajectory`          | `circle` \| `eight` | Path shape                      |
-| `linear_x`            | float               | Forward speed (m/s)             |
-| `angular_z`           | float               | Turn rate for circles (rad/s)   |
-| `angular_z_amplitude` | float               | Max turn amplitude for figure-8 |
-| `phase_offset`        | float (radians)     | Offset so vessels don't overlap |
-
----
-
-## 🤖 ROS2 Control
-
-### Send commands via terminal
+These use only standard message types, so they need just the base ROS source.
 
 ```bash
-docker exec n3mo_bridge bash -c "
-  source /opt/ros/humble/setup.bash &&
-  ros2 topic pub --once /mission/sailboat_01/cmd_vel \
-    geometry_msgs/msg/Twist \
-    '{linear: {x: 1.0}, angular: {z: 0.0}}'
-"
+# what's being published
+docker compose exec ros_bridge bash -lc \
+ "source /opt/ros/humble/setup.bash && ros2 topic list"
+
+# watch target poses
+docker compose exec ros_bridge bash -lc \
+ "source /opt/ros/humble/setup.bash && ros2 topic echo /agent_01/target_pose"
+
+# watch live boat positions
+docker compose exec ros_bridge bash -lc \
+ "source /opt/ros/humble/setup.bash && ros2 topic echo /dynamic_obstacles"
+
+# map metadata only (don't echo the huge data array); latched, so --once returns it
+docker compose exec ros_bridge bash -lc \
+ "source /opt/ros/humble/setup.bash && ros2 topic echo /map --field info --once"
+
+# publish rate
+docker compose exec ros_bridge bash -lc \
+ "source /opt/ros/humble/setup.bash && ros2 topic hz /dynamic_obstacles"
 ```
 
-### ROS2 Topics
-
-| Topic                   | Direction        | Type           | Description                      |
-| ----------------------- | ---------------- | -------------- | -------------------------------- |
-| `/mission/{id}/cmd_vel` | → n3mo_controller| Twist          | Send velocity command to object  |
-| `/{id}/cmd_vel`         | → Unity          | Twist          | Forwarded from controller        |
-| `/{id}/pose`            | → Unity          | PoseStamped    | Exact position (pose mode)       |
-| `/unity/all_poses`      | Unity → ROS2     | PoseArray      | All live object positions        |
-| `/occupancy_grid`       | ROS2 publish     | OccupancyGrid  | Live 2D obstacle map             |
-| `/sailboat/gps`         | Unity → ROS2     | NavSatFix      | Boat GPS position                |
-| `/sailboat/imu`         | Unity → ROS2     | Imu            | Boat orientation                 |
-| `/environment/wind`     | Unity → ROS2     | Vector3        | Wind speed and direction         |
-| `/obstacles`            | → mission_planner| String         | All detected obstacles           |
+> **Tip — shell shortcut.** Add this to `~/.zshrc` (or `~/.bashrc`) to skip the boilerplate.
+> It sources both setups, which works for every command (the workspace overlay re-exposes
+> base ROS):
+> ```bash
+> dros() { docker exec -it n3mo_bridge bash -lc \
+>   "source /opt/ros/humble/setup.bash && source /root/ros2_ws/install/setup.bash && ros2 $*"; }
+> ```
+> Then: `dros topic list`, `dros topic echo /dynamic_obstacles`,
+> `dros launch n3mo_control target_pose.launch.py x:=-190 z:=-110`.
 
 ---
 
-## 🐳 Docker Services
+## 6. View the map (terminal tools)
 
-| Service                 | Container        | Port  | Description                                      |
-| ----------------------- | ---------------- | ----- | ------------------------------------------------ |
-| `ros_bridge`            | n3mo_bridge      | 10000 | ROS TCP Bridge — connects Unity to ROS2          |
-| `n3mo_controller`       | n3mo_controller  | —     | Master controller for all dynamic objects        |
-| `mission_planner`       | n3mo_mission     | —     | High level mission brain                         |
-| `sensor_publisher`      | n3mo_sensors     | —     | Publishes sensor data from Unity to ROS2         |
-| `obstacle_detector`     | n3mo_obstacles   | —     | Detects obstacles within radius                  |
-| `trajectory_publisher`  | n3mo_trajectory  | —     | Autonomous demo trajectory scenarios             |
-| `occupancy_grid_server` | n3mo_grid        | —     | Builds and publishes live occupancy grid         |
-| `grid_visualiser`       | n3mo_viz         | 8080  | Browser-based live map at http://localhost:8080  |
+What each tool shows: `/map` is the **static** layer (buoys); `/dynamic_obstacles` is the
+**live** layer (boats). `view_map.py`/`save_map.py` show only the static map;
+`view_live.py` overlays both.
 
-### Useful Docker commands
+### Live scene — static + moving boats (colour, headless)
+```bash
+docker compose exec ros_bridge bash -lc \
+ "source /opt/ros/humble/setup.bash && python3 /root/ros2_ws/src/n3mo_control/tools/view_live.py"
+```
+Redraws ~4×/s: **blue dots = static buoys**, **red dots = live boats** (move as you drive),
+each labelled with its `(x, z)` position just above the dot. Ctrl-C to quit. No GUI needed.
+
+### Static map only (ASCII)
+```bash
+docker compose exec ros_bridge bash -lc \
+ "source /opt/ros/humble/setup.bash && python3 /root/ros2_ws/src/n3mo_control/tools/view_map.py"
+```
+`#` = occupied (buoy), `.` = free. First line shows `occupied=N` (true occupied-cell count).
+
+### Save the static map to an image
+```bash
+docker compose exec ros_bridge bash -lc \
+ "source /opt/ros/humble/setup.bash && python3 /root/ros2_ws/src/n3mo_control/tools/save_map.py"
+```
+Writes `recordings/map.png` (full, 1 px/cell — mostly white, zoom in to see buoys),
+`recordings/map_zoom.png` (cropped + 8× upscaled — buoys clearly visible), and
+`recordings/map.yaml` (ROS map metadata). Open the PNGs on the host.
+
+---
+
+## 7. RViz2 (integrated view)
+
+The `rviz` profile starts **everything**: the bridge, the **scenario engine** (traffic +
+markers, see §10), and RViz with the preloaded config (`config/n3mo.rviz`). Displays: **Map**
+(`/map`), **Tracks** (`/sim/tracks/markers`, colored cubes), **Ego** (`/sim/boat/pose`, green
+arrow). Run `docker compose build` once first so the image has the scenario nodes.
+
+### Linux
+```bash
+xhost +local:docker                      # allow containers to use your X server (per session)
+docker compose --profile rviz up         # bridge + scenario engine + RViz window
+```
+
+### macOS (needs XQuartz)
+```bash
+brew install --cask xquartz
+open -a XQuartz                          # Settings → Security → ✅ "Allow connections from network clients", then reopen
+xhost + 127.0.0.1
+export DISPLAY=host.docker.internal:0
+docker compose --profile rviz up
+```
+
+Fixed Frame is `map`. Press **Play** in Unity so `/map` is published — the generator then
+auto-generates traffic and RViz fills in. Stop: `docker compose --profile rviz down` (or Ctrl-C).
+
+---
+
+## 8. Control modes
+
+Each dynamic boat picks its controller via `config/Scene.json` `control_mode`
+(`"manual"` | `"auto"`), and you can switch it live in the boat's `BoatControlSwitcher`
+Inspector while playing.
+
+- **Manual** — keyboard: `W` forward, `S` back, `A`/`D` steer.
+- **Auto** — follows `/{id}/target_pose` (see §4).
+
+---
+
+## 9. Synthetic dataset capture (Unity Perception)
+
+Captures **labeled boat-POV training data** for ML perception / obstacle detection, using
+the Unity **Perception** package. Each captured frame yields RGB + 2D & 3D bounding boxes +
+instance & semantic segmentation + depth, written in **SOLO** format.
+
+Taxonomy: segmentation `water / sky / static_obstacle / dynamic_obstacle`; detection `buoy`,
+`vessel`. (Phase 1 covers buoy/vessel + static/dynamic obstacle; water/sky come later.)
+
+### One-time Unity setup
+1. **Label the prefabs** — Add Component → **Labeling**:
+   - Buoy prefab → `buoy`, `static_obstacle`
+   - boat prefab(s) → `vessel`, `dynamic_obstacle`
+2. **Label configs** (in `Assets/Perception/`): **IdLabelConfig** (`buoy`, `vessel`),
+   **SemanticLabelConfig** (`static_obstacle`, `dynamic_obstacle`).
+3. **Boat POV camera** — a forward-facing Camera on the boat prefab with **Perception Camera**
+   + labelers (BoundingBox2D/3D, Instance, Semantic, Depth) assigned to those configs;
+   **Capture Trigger Mode = Manual**; render to a **1280×720** Render Texture (fixes
+   resolution + keeps it off the main view).
+4. **Add `DatasetCaptureScheduler`** to that camera — `Capture Hz = 3`,
+   `Control Topic = /dataset/control`.
+
+### Start / stop recording
+Capture only happens while recording is on. Toggle it any of three ways:
+```bash
+# START (ROS)
+docker compose exec ros_bridge bash -lc \
+ "source /opt/ros/humble/setup.bash && ros2 topic pub --once /dataset/control std_msgs/Bool '{data: true}'"
+# STOP (ROS)
+docker compose exec ros_bridge bash -lc \
+ "source /opt/ros/humble/setup.bash && ros2 topic pub --once /dataset/control std_msgs/Bool '{data: false}'"
+```
+- **Hotkey:** press **R** in the Unity Game window.
+- **Inspector:** toggle **Capturing** on the scheduler.
+
+Console logs `▶ START` / `■ STOP — N frames captured`. The dataset is finalized when you
+**stop Play**.
+
+### Output + preview
+SOLO output goes under `~/.config/unity3d/<Company>/<Product>/solo/` (exact path logged in
+the Console).
+
+**`solo_preview.py`** is a sanity check on your *labels*: a JSON number like
+`origin: [1001, 281]` doesn't tell you if a label is actually *correct*, so the tool reads
+each frame's `frame_data.json`, takes the 2D bounding boxes, and **draws them onto the RGB
+image** (red box + yellow label). Open the results and you can instantly see whether each
+box sits tightly on the right object — the fastest way to confirm the dataset is trainable
+before generating thousands of frames. It's read-only: it never changes the dataset, just
+writes annotated copies into a `preview/` subfolder.
+
+Run it from a Python venv in the project root (Pillow is its only dependency):
+```bash
+# one-time
+python3 -m venv .venv
+source .venv/bin/activate            # Windows: .venv\Scripts\activate
+pip install pillow                   # (or: pip install -r requirements.txt)
+
+# each time
+python3 tools/solo_preview.py        # auto-finds the latest SOLO dataset
+# or point it at a specific one:
+python3 tools/solo_preview.py ~/.config/unity3d/<Company>/<Product>/solo
+```
+With no path it auto-discovers the most recent SOLO dataset under
+`~/.config/unity3d/*/*/solo*`. Annotated frames land in a `preview/` subfolder next to
+each captured frame.
+
+**Depth sanity + preview — `depth_preview.py`.** Perception also writes a depth image per
+frame (32-bit float EXR = distance from the camera, in **metres**). Pillow can't read EXR, so
+this companion tool uses OpenCV: it prints each frame's depth **min/max/mean/median** (so you
+can confirm the values really are metres — e.g. a buoy ~30 m away reads ~30) and saves a
+colorized `*_depth.png` (near = blue, far = red) into the same `preview/` folder.
+```bash
+pip install opencv-python numpy          # one-time, in the venv
+python3 tools/depth_preview.py           # auto-finds the latest SOLO dataset
+```
+
+> `.venv/` is gitignored — don't commit it. `requirements.txt` is the dependency record.
+
+### Capture rate
+
+`DatasetCaptureScheduler.captureHz` defaults to **10 Hz**, matching the scenario generator's
+`/sim/tracks` rate, so image samples line up with the traffic updates. On `STOP` it logs the
+**actual** achieved rate (`… = 9.8 Hz actual (target 10)`) — if HDRP can't sustain 10 in the
+editor, lower it (e.g. 5) or run a built player. Capture is on-demand: start/stop via
+`/dataset/control` (`std_msgs/Bool`) or the `R` hotkey.
+
+### Label water and sky — `marine_surface.py`
+
+HDRP water is transparent (doesn't render into Perception's segmentation pass) and sky has no
+geometry, so water/sky are labeled **geometrically** by horizon synthesis from the camera pose +
+intrinsics. No Unity changes needed.
+```bash
+python3 tools/marine_surface.py          # -> marine_seg/ per frame
+python3 tools/marine_surface.py --flip    # if water/sky come out swapped
+```
+Outputs per frame: `*_marine_seg.png` (colored preview) and `*_marine_classes.png`
+(class-index mask: 0=water, 1=sky, 2=obstacle). See `doc/water-sky-and-yolo.md`.
+
+### Export to YOLO — `solo_to_yolo.py`
+
+Convert the SOLO 2D boxes to an Ultralytics-YOLO **detection** dataset (boxes come from Unity's
+labeler — no manual boxing):
+```bash
+python3 tools/solo_to_yolo.py                       # -> ./yolo (min 10px, 20% val)
+python3 tools/solo_to_yolo.py --out yolo --min 10 --val-frac 0.2
+```
+Produces `yolo/{images,labels}/{train,val}` + `data.yaml`. Train with
+`yolo detect train data=yolo/data.yaml model=yolo11n.pt`. See `doc/water-sky-and-yolo.md`.
+
+---
+
+## 10. Procedural traffic + map architecture (scenario generator)
+
+A **ROS scenario generator** (vendored from `n3-unity-sim` into `ros2_ws/src/`) populates the
+water with **procedural moving traffic** that Unity renders and RViz visualizes. It's the
+source of varied, labeled obstacles for the dataset (§9).
+
+### The two map layers — static vs dynamic
+
+The sim exposes the scene to ROS as **two distinct layers**; don't conflate them:
+
+| Layer | Topic | What it is | Owner / direction |
+|---|---|---|---|
+| **Static map** | `/map` (`OccupancyGrid`) | fixed geometry: island + buoys, as a grid of free/occupied cells | Unity `OccupancyGridPublisher` (Unity → ROS) |
+| **Dynamic traffic** | `/sim/tracks` (`TrackArray`) | moving obstacles, each id/type/pose/velocity | ROS `scenario_generator` (ROS → Unity) |
+
+The **static** layer flows Unity → ROS (Unity knows the geometry). The **dynamic** layer flows
+ROS → Unity (the generator invents the traffic; Unity renders it via `TrackSpawner.cs`).
+
+> **`DynamicObstaclePublisher` was repurposed.** It used to export Unity-spawned moving boats as
+> `/dynamic_obstacles` (a bare `PoseArray`) — obsolete once traffic moved to `/sim/tracks`. It
+> now publishes **ALL authored scene objects** (ego + buoys) as a `TrackArray` on
+> **`/scene/objects`** (id + type + pose + velocity each). So the full scene over ROS is:
+> `/sim/tracks` (procedural traffic) **+** `/scene/objects` (authored objects) = every object.
+
+### Query every object in the scene
+
+The full scene lives on **two** `TrackArray` topics (same message type): `/scene/objects`
+(authored: ego + buoys) and `/sim/tracks` (procedural traffic). **All objects = both topics.**
+
+Dump everything in one command:
+```bash
+docker compose exec ros_bridge bash -lc \
+ "source /opt/ros/humble/setup.bash && source /root/ros2_ws/install/setup.bash && \
+  echo '===== AUTHORED (ego + buoys) =====' && ros2 topic echo /scene/objects --once && \
+  echo '===== PROCEDURAL TRAFFIC =====' && ros2 topic echo /sim/tracks --once"
+```
+
+Or each on its own:
+```bash
+ros2 topic echo /scene/objects --once   # authored: ego (id 9000) + buoys (9001…)
+ros2 topic echo /sim/tracks --once        # procedural traffic (ids 1…)
+```
+Each entry has `id`, `type`, `pose`, `twist`. The **id ranges distinguish the source**: ≥ 9000 =
+authored (logged in Unity, e.g. `id 9000 = agent_01`), < 1000 = generated. `type` is the
+`n3_new_msgs/Track` constant (`1` = sailboat/ego, `11` = buoy, …).
+
+In code, a consumer subscribes to **both** topics and merges by `id` for a live, complete scene.
+
+### What is a costmap?
+
+A **costmap** is an occupancy grid used for *planning*: a 2D grid where each cell marks that
+patch of world as **free** (`0`, navigable water) or **occupied** (`100`, obstacle). The
+generator reads the static map **as a costmap** to decide where traffic may go — it samples
+spawn points and waypoint paths only in free cells, eroded by a safety margin around
+obstacles. So **`/map` *is* the costmap**: the generator subscribes to it (remapped to
+`/map/costmap_static`) and places boats only in navigable water, automatically avoiding the
+island and buoys. Add scene geometry not spawned by SceneBuilder (e.g. the island) to
+`OccupancyGridPublisher → Extra Obstacles` so it appears in the costmap.
+
+### The closed loop
+
+```
+Unity /map (island+buoys) ──► scenario_generator ──► /sim/tracks ──► TrackSpawner (Unity 3D)
+   ▲  OccupancyGridPublisher     (samples free water)      └────────► /sim/tracks/markers ─► RViz
+   └───────────── ego /sim/boat/pose ◄── EgoPosePublisher ──────────────────────────────► RViz
+```
+
+Unity's own map drives the traffic; the traffic renders in both Unity and RViz; the ego is tracked.
+
+### Run the whole thing — one command
 
 ```bash
-# View all service logs
-docker compose -f docker-compose-ros2.yml logs -f
-
-# View specific service
-docker compose -f docker-compose-ros2.yml logs -f n3mo_grid
-
-# Check service status
-docker compose -f docker-compose-ros2.yml ps
-
-# Stop all services
-docker compose -f docker-compose-ros2.yml down
-
-# Rebuild after code changes
-docker compose -f docker-compose-ros2.yml build --no-cache
-
-# List active ROS2 topics
-docker exec n3mo_bridge bash -c \
-  "source /opt/ros/humble/setup.bash && ros2 topic list"
-
-# Check occupancy grid live
-docker exec -it n3mo_grid bash -c "
-  source /opt/ros/humble/setup.bash &&
-  source /root/ros2_ws/install/setup.bash &&
-  ros2 run n3mo_control grid_checker
-"
+docker compose build                 # once (bakes the scenario nodes into the image)
+docker compose --profile rviz up     # ros_bridge + scenario engine + tracks_markers + RViz
 ```
+Then press **Play** in Unity. The generator **auto-generates the moment Unity's `/map`
+arrives** (`gen_on_first_costmap`) — no manual trigger. In RViz you'll see the map (occupied
+island/buoys), colored cubes (traffic, moving, in the water), and a green arrow (the ego). In
+Unity, `TrackSpawner` spawns catamarans/buoys in open water.
 
----
+> ⚠️ **Set `OccupancyGridPublisher → Resolution = 5` (m/cell).** At the 1 m default a 1 km map
+> is 1,000,000 cells and the generator's margin erosion takes ~a minute. 5 m → instant.
 
-## 🧩 Unity Scripts
+Unity wiring (one-time): add the island to `OccupancyGridPublisher → Extra Obstacles`, put
+`EgoPosePublisher` on the boat prefab, and disable `DynamicObstaclePublisher`.
 
-### SceneLoader.cs
-
-Reads `scene_config.json` at startup and spawns all objects. Searches two locations: project root `../../config/` first, then `Assets/Config/`. Automatically attaches `PoseController` or `ROSController` to dynamic objects based on the `Use Pose Control` toggle. Assigns the first sailboat as the Cinemachine camera follow target.
-
-### PoseController.cs
-
-Attached automatically to dynamic objects when `Use Pose Control` is enabled. Subscribes to `/{id}/pose` and teleports the object to the exact received position each frame. Applies a per-type rotation offset to match each prefab's forward axis. No physics drift.
-
-### ROSController.cs
-
-Attached automatically to dynamic objects when `Use Pose Control` is disabled. Subscribes to the object's unique ROS2 topic. Applies physics forces based on incoming `Twist` messages. Supports `useUpAsForward` for prefabs with -90 X rotation (catamaran, buoy).
-
-### OccupancyGridPublisher.cs
-
-Attached to SceneManager. Reads live positions of all tracked objects from SceneLoader every 0.5 seconds and publishes them as a `PoseArray` to `/unity/all_poses`. The occupancy grid server subscribes to this topic to update the live map.
-
----
-
-## 🐍 ROS2 Nodes
-
-### config_loader.py
-
-Shared utility used by all nodes. Searches for `scene_config.json` in multiple locations — Docker mounted path first (`/n3mosim/config/`), then ROS2 package share directory, then relative fallback.
-
-### n3mo_controller.py
-
-Master controller. Reads config and creates one publisher per dynamic object on unique topic `/{object_id}/cmd_vel`. Subscribes to `/mission/{object_id}/cmd_vel` from mission planner and forwards to Unity.
-
-### mission_planner.py
-
-High level mission brain. Manages per-object state machines (`idle`, `forward`, `patrol`, `turn_left`, `turn_right`, `stop`). Publishes to `/mission/{object_id}/cmd_vel`.
-
-### pose_publisher.py
-
-Publishes exact `PoseStamped` positions for circle and figure-8 trajectories directly to `/{id}/pose`. Used with `PoseController` mode for perfect, drift-free paths.
+### Run / tune the engine manually
 
 ```bash
-ros2 run n3mo_control pose_publisher --ros-args -p scenario:=circle
-ros2 run n3mo_control pose_publisher --ros-args -p scenario:=eight
+# start detached, leave running while Unity plays
+docker compose exec -d ros_bridge bash -lc \
+ "source /opt/ros/humble/setup.bash && source /root/ros2_ws/install/setup.bash && \
+  ros2 run n3_sim scenario_generator --ros-args -r /map/costmap_static:=/map \
+    -p gen_on_first_costmap:=true -p gen_track_count:=10"
+docker compose exec -d ros_bridge bash -lc \
+ "source /opt/ros/humble/setup.bash && source /root/ros2_ws/install/setup.bash && \
+  ros2 run n3_sim tracks_markers"
+
+# inspect the traffic
+docker compose exec ros_bridge bash -lc \
+ "source /opt/ros/humble/setup.bash && source /root/ros2_ws/install/setup.bash && \
+  ros2 topic echo /sim/tracks --once"
 ```
 
-### trajectory_publisher.py
+Key generator params (`--ros-args -p name:=value`):
 
-Demo scenario runner using velocity commands. Reads a scenario JSON file and publishes `Twist` commands for each vessel. Used with `ROSController` mode.
+| Param | Meaning |
+|---|---|
+| `gen_track_count` | number of tracks (0 = use `gen_density`) |
+| `gen_area_type` | type mix: `lake` / `coastal` / `harbor` / `open_sea` |
+| `gen_spawn_spread_s` | spawns staggered over `[0, N]` s (0 = all at once; >0 = steady flow) |
+| `gen_max_waypoints` | path length per track (longer = longer-lived) |
+| `gen_on_first_costmap` | auto-generate when the costmap (`/map`) arrives |
+| `gen_random_seed` | reproducible scenarios (0 = random) |
 
-### occupancy_grid_server.py
+Traffic **thins as tracks finish their paths**, then repopulates when the scenario loops —
+use `gen_spawn_spread_s > 0` for a steady population.
 
-Builds and publishes a 2D occupancy grid from static obstacles (scene_config.json) and live object poses from Unity (/unity/all_poses). Publishes to `/occupancy_grid` at 1Hz. Grid is 1000x1000m by default, covering any reasonable spawn position.
-
-### grid_checker.py
-
-Diagnostic node. Subscribes to `/occupancy_grid` and prints live stats — map size, resolution, occupied cell count, free cell count. Run any time to verify the pipeline.
-
-### grid_visualiser.py
-
-Flask-based web server. Subscribes to `/occupancy_grid` and serves a live browser map at `http://localhost:8080`. Shows all occupied cells as cyan dots on a dark background, updating at 2Hz. No rviz required.
-
-### sensor_publisher.py
-
-Receives Unity simulation data and publishes as standard ROS2 sensor messages — GPS (`NavSatFix`), IMU (`Imu`), wind (`Vector3`). GPS origin set to Brest, France (48.3833°N, 4.4833°W).
-
-### obstacle_detector.py
-
-Receives all object positions from Unity. Filters obstacles within configurable detection radius (default 50m). Publishes to `/obstacles` and `/obstacles/nearby`.
+> **Testing without the real map:** `map_manager` can publish a blank navigable square instead,
+> centered anywhere (e.g. on the ego boat at ENU `(0, -300)`):
+> ```bash
+> ros2 run n3_sim map_manager --ros-args -p publish_empty_costmap:=true \
+>   -p empty_costmap_size_m:=200 -p empty_costmap_center_y_m:=-300
+> ```
+> A blank map has no obstacles, so traffic can land on the island — use the real `/map`
+> (the `rviz` profile) for land-avoiding traffic.
 
 ---
 
-## 🗺️ Roadmap
+## 11. Layout
 
-### Core Simulation
-- [x] Base marine environment (HDRP ocean, sky, island terrain, volumetric fog)
-- [x] Sailboat prefab (PBR model + physics)
-- [x] Buoy prefab (navigation buoy + physics)
-- [x] Catamaran prefab (racing catamaran + physics)
-- [x] JSON config-based dynamic scene loading
-- [x] ROS TCP Connector integration
-- [x] Docker Compose ROS2 stack
-- [x] Multi-object independent ROS2 control
-- [x] Shared scene_config.json (Unity + ROS2)
-- [x] Mission planner with per-object state machine
-- [x] Pose control mode (PoseStamped — zero drift)
-- [x] Velocity control mode (Twist — physics-based)
-- [x] Trajectory publisher — circle and figure-8 demo scenarios
-- [ ] Buoyancy physics system
-- [ ] Realistic weather randomization (storm, fog, rain, night)
-- [ ] Seagull and swimmer prefabs
-
-### Data Export & Recording
-- [x] Occupancy grid map — generate and export from Unity scene
-- [x] Realtime update of scene over ROS2 — update environment parameters (wind, time of day, wave height)
-- [ ] How much data — estimate volume of data to be exported based on a 10-15 min window
-- [ ] ROS bag & Unity Recorder — record all ROS2 topics with timestamps for replay and dataset creation; Unity Recorder captures camera feeds and scene state in sync
-
-### Scene & World Generation
-- [ ] Generate world scene — procedural scene generation inside Unity
-- [ ] Generate scene from real-world maps — research importing real coastline and maritime data into Unity
-- [ ] Map integration — connect external map sources to Unity scene generator
-- [ ] Generate map in Unity and export — bidirectional map pipeline
-- [ ] Scenario generation — integrate existing scenario generation work from Christophe
-
-### Physics & Movement
-- [ ] Physics-based movement — replace current pose teleportation with physics-driven vessel motion for realism and higher-quality training data
-
-### Camera System
-- [ ] Field of view — define and configure camera FOV parameters
-- [ ] Physics-based camera motion — camera should react to boat motion and wave dynamics
-- [ ] Camera attached to boat frame — camera observes boat from a fixed pose relative to the vessel
-- [ ] URDF-defined camera pose — camera transform read from URDF, not hardcoded in Unity
-
-### Sensor & Streaming
-- [ ] Camera image streaming (binary + base64 JPEG via WebSocket)
-- [ ] AUV telemetry streaming (GPS, heading, speed)
-- [ ] Unity → ROS2 full GPS/IMU pipeline (live from scene)
-- [ ] LiDAR sensor simulation
-- [ ] Multiple vessel telemetry in single ROS2 message
-
-### Integration
-- [ ] ROC web-app integration
-- [ ] LiDAR sensor simulation
-
----
-
-## Troubleshooting
-
-### Unity can't connect to ROS bridge
-
-Docker networking on Mac can break after a restart. Fix:
-```bash
-docker compose -f docker-compose-ros2.yml down
-docker compose -f docker-compose-ros2.yml up -d
 ```
-Then hit Play in Unity again.
-
-### Objects not spawning in Unity
-
-Check the Console tab for `[SceneLoader] Config not found!`. The config must exist at either:
-- `YourProject/../../config/scene_config.json`
-- `YourProject/Assets/Config/scene_config.json`
-
-### Occupancy grid shows 0 occupied cells
-
-Run the grid checker to confirm the server is running, then check Unity is connected:
-```bash
-docker exec -it n3mo_bridge bash -c "
-  source /opt/ros/humble/setup.bash &&
-  source /root/ros2_ws/install/setup.bash &&
-  ros2 topic hz /unity/all_poses
-"
+config/Scene.json          scene definition (objects, positions, control_mode)
+config/n3mo.rviz           preloaded RViz layout
+Assets/Scripts/            Unity controllers + publishers
+  SceneBuilder.cs            spawns objects, wires controllers + map publishers
+  ManualBoatController.cs    keyboard control
+  AutonomousBoatController.cs ROS target-following control
+  BoatControlSwitcher.cs     manual/auto switch (per boat)
+  OccupancyGridPublisher.cs  static /map (costmap source; + Extra Obstacles for the island)
+  DynamicObstaclePublisher.cs publishes all authored scene objects (ego+buoys) -> /scene/objects (TrackArray)
+  TrackSpawner.cs            subscribes /sim/tracks, spawns/moves/despawns traffic by type
+  EgoPosePublisher.cs        publishes the ego boat pose to /sim/boat/pose
+  DatasetCaptureScheduler.cs Perception dataset capture (ROS/hotkey controlled)
+Assets/RosMessages/N3New/  hand-written Track / TrackArray C# messages (n3_new_msgs)
+ros2_ws/src/n3mo_control/  ROS 2 package (target_pose_publisher, tools/)
+ros2_ws/src/n3_sim/        vendored scenario generator (scenario_generator, map_manager,
+                             tracks_markers) + nodes
+ros2_ws/src/n3_common/     vendored shared lib (topics, params) used by n3_sim
+ros2_ws/src/n3_new_msgs/   vendored custom messages (Track, TrackArray, …)
+tools/solo_preview.py      overlay SOLO 2D bounding boxes onto RGB frames
+tools/depth_preview.py     depth sanity (metres check) + colorized depth preview (EXR via OpenCV)
+tools/camera_info.py       inspect per-frame camera intrinsics (matrix) + extrinsics (pose)
+tools/range_bearing.py     per-object range + bearing from SOLO 3D boxes -> metadata/ JSON per frame
+tools/semantic_preview.py  per-class semantic-segmentation coverage (water/sky/obstacle classes)
+tools/marine_surface.py    label water/sky via horizon synthesis -> marine_seg/ (preview + class mask)
+tools/filter_boxes.py      drop tiny 2D boxes from the dataset (--apply)
+tools/solo_to_yolo.py      export SOLO 2D boxes -> Ultralytics YOLO dataset (images/labels/data.yaml)
+tools/env_control (ros)    set weather/time over ROS (see doc/environment.md)
+docker-compose.yml         ros_bridge; `--profile rviz` adds scenario engine + RViz
+Dockerfile                 ROS 2 Humble + ROS-TCP-Endpoint + n3_sim/n3_common/n3_new_msgs (+ patches)
 ```
-Should show `average rate: 2.0`. If nothing — Unity isn't connected or `OccupancyGridPublisher` component is missing from SceneManager.
 
-### Sailboat outside grid bounds
-
-The default grid covers -500m to +500m. If your sailboat spawns outside this range increase the grid size in `docker-compose-ros2.yml`:
-```
-ros2 run n3mo_control occupancy_grid_server --ros-args -p origin_x:=-500.0 -p origin_y:=-500.0 -p width_m:=1000.0 -p height_m:=1000.0
-```
+Requires the **com.unity.perception** package (for §9). The scenario generator (§10) is
+vendored under `ros2_ws/src/` — see [`doc/todo.md`](doc/todo.md) for the dataset roadmap.

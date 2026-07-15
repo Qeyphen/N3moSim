@@ -1,0 +1,6 @@
+/colcon_ws/src/build/
+/colcon_ws/src/install/
+/colcon_ws/src/log/
+/colcon_ws/
+*.cpython-312.pyc
+/.idea/

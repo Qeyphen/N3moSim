@@ -1,0 +1,81 @@
+# map_manager
+map_manager_node:
+  ros__parameters:
+    # Fixed map origin: when true, publish lat/lon/alt below as the local ENU
+    # origin immediately at startup (skip waiting for /drivers/gps/fix).
+    use_fixed_origin: true
+    fixed_origin_lat_deg: 43.763
+    fixed_origin_lon_deg: 6.170
+    fixed_origin_alt_m: 0.0
+    # Empty costmap fallback: when true, latch a blank navigable grid on
+    # /map/costmap_static so consumers don't need their own fallback. Disable
+    # when a real costmap producer runs in the system.
+    publish_empty_costmap: true
+    empty_costmap_size_m: 200.0         # Square area centered on (0, 0) ENU.
+    empty_costmap_resolution_m: 10.0     # m/cell.
+
+# anemo_sim
+anemo_sim_node:
+  ros__parameters:
+    # Base (mean) true wind
+    twd_deg: 200.0                      # True wind direction (mean) in degrees CW from North.
+    tws_ms: 10.0                        # True wind speed (mean) in m/s.
+    publish_rate_hz: 5.0                # Publish rate in Hz.
+
+    # Wind direction variation around twd_deg
+    twd_variation_mode: "none"          # none | sinusoidal | turbulent (Ornstein-Uhlenbeck).
+    twd_sinus_period_s: 60.0            # Sinusoidal period in seconds.
+    twd_sinus_amplitude_deg: 10.0       # Sinusoidal peak amplitude in degrees.
+    twd_turb_std_deg: 8.0               # Turbulent 1-sigma deviation in degrees.
+    twd_turb_time_constant_s: 30.0      # Turbulent correlation time in seconds (higher = slower drift).
+
+    # Wind speed variation around tws_ms
+    tws_variation_mode: "none"          # none | sinusoidal | turbulent.
+    tws_sinus_period_s: 60.0            # Sinusoidal period in seconds.
+    tws_sinus_amplitude_ms: 1.5         # Sinusoidal peak amplitude in m/s.
+    tws_turb_std_ms: 1.2                # Turbulent 1-sigma deviation in m/s.
+    tws_turb_time_constant_s: 15.0      # Turbulent correlation time in seconds.
+
+    # Cross-channel turbulence coupling
+    wind_turb_correlation: 0.3          # Linear correlation in [-1, 1] between direction and speed turbulent noise.
+
+    # Reproducibility
+    random_seed: 0                      # 0 = time-based (non-reproducible), >0 = deterministic.
+
+# scenario_generator
+scenario_generator_node:
+  ros__parameters:
+    # Playback
+    scenario_file: "/ws/n3_sim/launch/open_water_scenario.yaml"
+    publish_rate_hz: 10.0               # Track publication rate in Hz.
+    loop: true                          # Loop scenario when duration is reached.
+    # Generation (used by /sim/generate_scenario service)
+    gen_output_file: "/ws/n3_sim/launch/scenario_generated.yaml"
+    gen_duration_s: 600.0               # Scenario duration in seconds.
+    gen_track_count: 12                  # Number of tracks (0 = use density).
+    gen_density: 5.0                    # Tracks per km².
+    gen_area_type: "lake"               # lake | coastal | harbor | open_sea.
+    gen_autostart: true                 # Load and start after generation.
+    gen_min_speed_kts: 0.0              # 0 = use type default.
+    gen_max_speed_kts: 0.0              # 0 = use type default.
+    gen_min_waypoints: 2
+    gen_max_waypoints: 6
+    gen_spawn_spread_s: 5.0            # Tracks spawn randomly within [0, N] seconds.
+    gen_margin_m: 10.0                  # Safety margin from costmap obstacles.
+    gen_random_seed: 0                  # 0 = non-reproducible.
+
+# boat_traj_generator
+boat_traj_generator_node:
+  ros__parameters:
+    speed_kts: 3.0                      # Boat speed along trajectory in knots.
+    margin_m: 20.0                      # Safety margin from costmap obstacles.
+    publish_rate_hz: 10.0               # Pose publication rate in Hz.
+    trajectory_type: "circle"        # lawnmower | circle | random_walk.
+    random_seed: 0                      # RNG seed for random_walk (0 = non-reproducible).
+    # Trajectory generation area (intersected with costmap navigable area).
+    # Set extent_x/y to 0 to fall back to full costmap.
+    area_center_x_m: 15.0               # ENU X center (m) of trajectory area.
+    area_center_y_m: 20.0               # ENU Y center (m) of trajectory area.
+    area_extent_x_m: 200.0              # Full X extent (m) of trajectory area.
+    area_extent_y_m: 200.0              # Full Y extent (m) of trajectory area.
+    circle_radius_m: 20.0                # Circle radius (m). 0 = derive from area bounds.

@@ -1,0 +1,73 @@
+launch:
+
+  # anemo_sim: simulated true wind direction + speed
+  - node:
+      pkg: n3_sim
+      exec: anemo_sim
+      name: anemo_sim_node
+      output: screen
+      param:
+        - from: $(find-pkg-share n3_sim)/launch/param.yaml
+
+  # scenario_generator: traffic tracks from YAML
+  - node:
+      pkg: n3_sim
+      exec: scenario_generator
+      name: scenario_generator_node
+      output: screen
+      param:
+        - from: $(find-pkg-share n3_sim)/launch/param.yaml
+
+  # boat_traj_generator: cyclic trajectory within costmap navigable area
+  - node:
+      pkg: n3_sim
+      exec: boat_traj_generator
+      name: boat_traj_generator_node
+      output: screen
+      param:
+        - from: $(find-pkg-share n3_sim)/launch/param.yaml
+
+  # track_foxglove_converter: visualization markers
+  - node:
+      pkg: n3_sim
+      exec: track_foxglove_converter
+      name: track_foxglove_converter_node
+      output: screen
+      param:
+        - from: $(find-pkg-share n3_sim)/launch/param.yaml
+
+  # ----- scenario_bridge: WebSocket bridge for MCP scenario injection -----
+  - node:
+      pkg: n3_sim
+      exec: scenario_bridge
+      name: scenario_bridge_node
+      output: screen
+
+
+  # ----- map manager -----
+  # Publishes /navigation/map/origin and (optionally) an empty /map/costmap_static
+  # fallback. All behavior driven from param.yaml (use_fixed_origin,
+  # fixed_origin_*, publish_empty_costmap, empty_costmap_*).
+  - node:
+      pkg: n3_sim
+      exec: map_manager
+      name: map_manager_node
+      output: screen
+      param:
+        - from: $(find-pkg-share n3_sim)/launch/param.yaml
+
+
+  # URDF model (for boat_link TF chain)
+  - include:
+      file: $(find-pkg-share n3_urdf)/launch/robot_state_publisher.launch.py
+
+  - node:
+      pkg: foxglove_bridge
+      exec: foxglove_bridge
+      name: foxglove_bridge
+      output: screen
+      param:
+        - name: max_qos_depth
+          value: 1000
+        - name: asset_uri_allowlist
+          value: ["package://.*"]

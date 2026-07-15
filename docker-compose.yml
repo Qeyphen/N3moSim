@@ -1,0 +1,88 @@
+networks:
+  ros_net:
+    driver: bridge
+
+services:
+
+  ros_bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: n3mo_control:latest
+    container_name: n3mo_bridge
+    networks:
+      - ros_net
+    ports:
+      - "10000:10000"
+    volumes:
+      - ./ros2_ws/src/n3mo_control:/root/ros2_ws/src/n3mo_control
+      - ./ros2_ws/src/n3_common:/root/ros2_ws/src/n3_common
+      - ./ros2_ws/src/n3_sim:/root/ros2_ws/src/n3_sim
+      - ./config:/n3mosim/config
+      - ./recordings:/recordings
+    environment:
+      - ROS_DOMAIN_ID=0
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+      - CYCLONEDDS_URI=<CycloneDDS><Domain><General><NetworkInterfaceAddress>eth0</NetworkInterfaceAddress></General></Domain></CycloneDDS>
+    command: >
+      bash -c "
+        source /opt/ros/humble/setup.bash &&
+        export AMENT_PREFIX_PATH=/root/ros2_ws/install/n3mo_control:/root/ros2_ws/install/ros_tcp_endpoint:$$AMENT_PREFIX_PATH &&
+        source /root/ros2_ws/install/setup.bash &&
+        echo 'Starting ROS TCP Bridge on 0.0.0.0:10000...' &&
+        ros2 run ros_tcp_endpoint default_server_endpoint --ros-args -p ROS_IP:=0.0.0.0 -p ROS_TCP_PORT:=10000
+      "
+    restart: unless-stopped
+
+  # Scenario engine (traffic). Part of the integrated `rviz` profile.
+  # Reads Unity's /map as the costmap, auto-generates on the first map, and
+  # publishes /sim/tracks + /sim/tracks/markers. Run `docker compose build` first
+  # so the image has the current scenario code + the tracks_markers node.
+  scenario:
+    image: n3mo_control:latest
+    container_name: n3mo_scenario
+    profiles: ["rviz"]
+    depends_on:
+      - ros_bridge
+    networks:
+      - ros_net
+    environment:
+      - ROS_DOMAIN_ID=0
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+      - CYCLONEDDS_URI=<CycloneDDS><Domain><General><NetworkInterfaceAddress>eth0</NetworkInterfaceAddress></General></Domain></CycloneDDS>
+    command:
+      - bash
+      - -c
+      - |
+        source /opt/ros/humble/setup.bash
+        source /root/ros2_ws/install/setup.bash
+        ros2 run n3_sim tracks_markers &
+        ros2 run n3_sim scenario_generator --ros-args -r /map/costmap_static:=/map -p gen_on_first_costmap:=true -p gen_track_count:=10 -p gen_spawn_spread_s:=20.0 -p gen_max_waypoints:=10
+    restart: unless-stopped
+
+  # Integrated GUI: `docker compose --profile rviz up`. Needs XQuartz/X11 on the host.
+  rviz:
+    image: osrf/ros:humble-desktop-full
+    container_name: n3mo_rviz
+    profiles: ["rviz"]
+    depends_on:
+      - ros_bridge
+    networks:
+      - ros_net
+    volumes:
+      - ./config:/config
+      # Linux uses the host X11 socket; harmless (empty) on macOS, which uses TCP.
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    environment:
+      - ROS_DOMAIN_ID=0
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+      - CYCLONEDDS_URI=<CycloneDDS><Domain><General><NetworkInterfaceAddress>eth0</NetworkInterfaceAddress></General></Domain></CycloneDDS>
+      # Linux: inherits the host's $DISPLAY (e.g. :0). macOS: export DISPLAY=host.docker.internal:0
+      - DISPLAY=${DISPLAY:-host.docker.internal:0}
+    command: >
+      bash -c "
+        apt-get update >/dev/null && apt-get install -y ros-humble-rmw-cyclonedds-cpp >/dev/null &&
+        source /opt/ros/humble/setup.bash &&
+        ( ros2 run tf2_ros static_transform_publisher --frame-id map --child-frame-id base_link & ) &&
+        rviz2 -d /config/n3mo.rviz
+      "

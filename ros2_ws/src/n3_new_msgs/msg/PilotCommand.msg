@@ -1,0 +1,4 @@
+float64 engine_speed_pct
+float64 rudder_position_pct
+float64 bow_thruster_pct
+float64 mast_speed_pct

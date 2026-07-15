@@ -1,0 +1,6 @@
+string context     # "dev", "sim", "prod", "trials", "hil"
+string profile     # "entry", "demo", ... → ros2 launch n3_bringup ${profile}.launch.yaml
+bool   autostart   # if true: (re)start immediately with the new target
+---
+bool ok
+string message

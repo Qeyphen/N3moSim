@@ -1,0 +1,39 @@
+{
+  "environment": {
+    "wind_speed": 5.0,
+    "wave_height": 1.5,
+    "time_of_day": "day"
+  },
+  "objects": [
+    {
+      "id": "agent_01",
+      "type": "Boat",
+      "dynamic": true,
+      "ros2_topic": "/agent_01/cmd_vel",
+      "control_mode": "manual",
+      "position": [0, 1, -300],
+      "rotation": [0, 0, 0]
+    },
+    {
+      "id": "buoy_01",
+      "type": "Buoy",
+      "dynamic": false,
+      "position": [-190, 0, -110],
+      "rotation": [-90, 0, 0]
+    },
+    {
+      "id": "buoy_02",
+      "type": "Buoy",
+      "dynamic": false,
+      "position": [-200, 0, -140],
+      "rotation": [-90, 0, 0]
+    },
+    {
+      "id": "buoy_03",
+      "type": "Buoy",
+      "dynamic": false,
+      "position": [-120, 0, -120],
+      "rotation": [-90, 0, 0]
+    }
+  ]
+}

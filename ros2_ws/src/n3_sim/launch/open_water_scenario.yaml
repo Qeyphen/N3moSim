@@ -1,0 +1,96 @@
+scenario:
+  name: "open_water_lake"
+  description: "Moderate lake traffic — all tracks within 100m of origin"
+  duration_s: 600
+
+  tracks:
+    # Sailboat crossing NE to SW at medium speed, tacking
+    - id: 1
+      type: sailboat
+      spawn_time_s: 0
+      despawn_time_s: 600
+      heading_mode: tangent
+      waypoints:
+        - { x: 60.0,  y: 80.0,  speed_kts: 4.5 }
+        - { x: 30.0,  y: 50.0,  speed_kts: 5.0 }
+        - { x: -20.0, y: 10.0,  speed_kts: 4.0 }
+        - { x: -50.0, y: -30.0, speed_kts: 5.0 }
+
+    # Motorboat fast crossing E to W
+    - id: 2
+      type: motorboat
+      spawn_time_s: 30
+      despawn_time_s: 300
+      heading_mode: tangent
+      waypoints:
+        - { x: 90.0,  y: 30.0, speed_kts: 15.0 }
+        - { x: 20.0,  y: 20.0, speed_kts: 18.0 }
+        - { x: -60.0, y: 35.0, speed_kts: 12.0 }
+
+    # Kayak along shoreline, slow
+    - id: 3
+      type: kayak
+      spawn_time_s: 0
+      despawn_time_s: 500
+      heading_mode: tangent
+      waypoints:
+        - { x: -30.0, y: -20.0, speed_kts: 3.0 }
+        - { x: 0.0,   y: -10.0, speed_kts: 3.5 }
+        - { x: 40.0,  y: -25.0, speed_kts: 3.0 }
+        - { x: 70.0,  y: -10.0, speed_kts: 2.5 }
+
+    # Swimmer near origin, very slow, short path
+    - id: 4
+      type: swimmer
+      spawn_time_s: 10
+      despawn_time_s: 400
+      heading_mode: tangent
+      waypoints:
+        - { x: -10.0, y: 5.0,  speed_kts: 1.0 }
+        - { x: 5.0,   y: 15.0, speed_kts: 0.8 }
+        - { x: -5.0,  y: 25.0, speed_kts: 0.6 }
+
+    # Paddleboard, gentle straight line
+    - id: 5
+      type: paddleboard
+      spawn_time_s: 60
+      despawn_time_s: 500
+      heading_mode: tangent
+      waypoints:
+        - { x: -40.0, y: 50.0, speed_kts: 2.0 }
+        - { x: 30.0,  y: 70.0, speed_kts: 2.5 }
+
+    # Static buoy (navigation mark)
+    - id: 6
+      type: buoy
+      spawn_time_s: 0
+      despawn_time_s: 600
+      heading_mode: fixed
+      waypoints:
+        - { x: 40.0, y: 40.0, speed_kts: 0.0 }
+
+    # Pedalo, slow circular path
+    - id: 7
+      type: pedalo
+      spawn_time_s: 20
+      despawn_time_s: 550
+      heading_mode: tangent
+      waypoints:
+        - { x: -50.0, y: 60.0, speed_kts: 2.0 }
+        - { x: -30.0, y: 80.0, speed_kts: 1.5 }
+        - { x: -10.0, y: 65.0, speed_kts: 2.0 }
+        - { x: -30.0, y: 45.0, speed_kts: 1.5 }
+        - { x: -50.0, y: 60.0, speed_kts: 2.0 }
+
+    # Jetski, fast and erratic
+    - id: 8
+      type: jetski
+      spawn_time_s: 120
+      despawn_time_s: 400
+      heading_mode: tangent
+      waypoints:
+        - { x: 70.0,  y: -40.0, speed_kts: 25.0 }
+        - { x: 90.0,  y: 30.0,  speed_kts: 30.0 }
+        - { x: 40.0,  y: 60.0,  speed_kts: 20.0 }
+        - { x: -20.0, y: 20.0,  speed_kts: 28.0 }
+        - { x: 70.0,  y: -40.0, speed_kts: 25.0 }

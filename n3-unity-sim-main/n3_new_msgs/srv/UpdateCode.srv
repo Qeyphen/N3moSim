@@ -1,0 +1,4 @@
+string branch    # git branch to checkout and pull
+---
+bool ok
+string message

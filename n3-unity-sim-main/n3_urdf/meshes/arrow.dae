@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+  <asset>
+    <created>2025-01-01</created>
+    <modified>2025-01-01</modified>
+    <unit name="meter" meter="1"/>
+    <up_axis>Z_UP</up_axis>
+  </asset>
+
+  <library_effects>
+    <effect id="arrow_effect">
+      <profile_COMMON>
+        <technique sid="common">
+          <phong>
+            <emission><color>0 0 0 1</color></emission>
+            <ambient><color>0.1 0.1 0.1 1</color></ambient>
+            <diffuse><color>0.9 0.15 0.1 1.0</color></diffuse>
+            <specular><color>0.4 0.4 0.4 1</color></specular>
+            <shininess><float>40</float></shininess>
+          </phong>
+        </technique>
+      </profile_COMMON>
+    </effect>
+  </library_effects>
+
+  <library_materials>
+    <material id="arrow_mat" name="arrow_mat">
+      <instance_effect url="#arrow_effect"/>
+    </material>
+  </library_materials>
+
+  <library_geometries>
+    <geometry id="arrow" name="arrow">
+      <mesh>
+        <source id="arrow-positions">
+          <float_array id="arrow-positions-array" count="18">
+            1.200000 0.000000 0.000000 -0.800000 -0.800000 0.000000 -0.800000 0.800000 0.000000 1.200000 0.000000 0.010000 -0.800000 -0.800000 0.010000 -0.800000 0.800000 0.010000
+          </float_array>
+          <technique_common>
+            <accessor source="#arrow-positions-array" count="6" stride="3">
+              <param name="X" type="float"/>
+              <param name="Y" type="float"/>
+              <param name="Z" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+
+        <source id="arrow-normals">
+          <float_array id="arrow-normals-array" count="18">
+            -0.000000 0.000000 -1.000000 -0.000000 0.000000 -1.000000 -0.000000 0.000000 -1.000000 0.000000 0.000000 1.000000 0.000000 0.000000 1.000000 0.000000 0.000000 1.000000
+          </float_array>
+          <technique_common>
+            <accessor source="#arrow-normals-array" count="6" stride="3">
+              <param name="X" type="float"/>
+              <param name="Y" type="float"/>
+              <param name="Z" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+
+        <vertices id="arrow-vertices">
+          <input semantic="POSITION" source="#arrow-positions"/>
+        </vertices>
+
+        <triangles count="2" material="arrow_mat">
+          <input semantic="VERTEX" source="#arrow-vertices" offset="0"/>
+          <input semantic="NORMAL" source="#arrow-normals"  offset="1"/>
+          <p>0 0 1 1 2 2 5 3 4 4 3 5</p>
+        </triangles>
+      </mesh>
+    </geometry>
+  </library_geometries>
+
+  <library_visual_scenes>
+    <visual_scene id="Scene" name="Scene">
+      <node id="arrow_node" name="arrow" type="NODE">
+        <instance_geometry url="#arrow">
+          <bind_material>
+            <technique_common>
+              <instance_material symbol="arrow_mat"
+                                 target="#arrow_mat"/>
+            </technique_common>
+          </bind_material>
+        </instance_geometry>
+      </node>
+    </visual_scene>
+  </library_visual_scenes>
+
+  <scene>
+    <instance_visual_scene url="#Scene"/>
+  </scene>
+</COLLADA>

@@ -1,0 +1,44 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2f09f279848e42cea259348b13bce4c5, type: 3}
+  m_Name: IdLabelConfig
+  m_EditorClassIdentifier: Unity.Perception.Runtime::UnityEngine.Perception.GroundTruth.LabelManagement.IdLabelConfig
+  m_LabelEntries:
+  - label: buoy
+    id: 1
+    hierarchyRelation: 0
+  - label: vessel
+    id: 2
+    hierarchyRelation: 0
+  - label: Character
+    id: 3
+    hierarchyRelation: 0
+  - label: dynamic_obstacle
+    id: 4
+    hierarchyRelation: 0
+  - label: jet_ski
+    id: 5
+    hierarchyRelation: 0
+  - label: kayak
+    id: 6
+    hierarchyRelation: 0
+  - label: catamaran
+    id: 7
+    hierarchyRelation: 0
+  - label: static_obstacle
+    id: 8
+    hierarchyRelation: 0
+  - label: New Label_1
+    id: 9
+    hierarchyRelation: 0
+  autoAssignIds: 1
+  startingLabelId: 1

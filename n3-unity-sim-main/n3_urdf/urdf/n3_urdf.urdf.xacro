@@ -1,0 +1,378 @@
+<?xml version="1.0"?>
+<!--
+  URDF - N3mo catamaran autonome asymetrique
+
+  Convention Z : tout le bateau au dessus de z=0 (fond de coque principale)
+  Z layout:
+    0.000  fond coque principale
+    0.315  haut des coques (hull top)
+    0.390  centre des barres (beam, h=0.15, posées sur hull top)
+    0.465  haut des barres = bas du pont
+    0.540  centre du pont (deck, h=0.15, pose sur beam top)
+    0.615  haut du pont
+-->
+<robot name="n3_urdf" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+    <!-- MASSES -->
+    <xacro:property name="hull_main_mass" value="50.0"/>
+    <xacro:property name="hull_small_mass" value="25.0"/>
+    <xacro:property name="deck_mass" value="18.0"/>
+    <xacro:property name="cb_mass" value="8.0"/>
+    <xacro:property name="mast_mass" value="3.0"/>
+    <xacro:property name="sail_mass" value="40.0"/>
+    <xacro:property name="rudder_mass" value="2.0"/>
+    <xacro:property name="span" value="3.500"/>
+    <xacro:property name="sail_chord" value="3.830"/>
+
+    <!-- Z positions -->
+    <xacro:property name="hull_top_z" value="0.315"/>
+    <xacro:property name="beam_h" value="0.15"/>
+    <xacro:property name="deck_h" value="0.15"/>
+
+    <!-- INERTIE -->
+    <xacro:macro name="box_inertia" params="m x y z">
+        <inertial>
+            <mass value="${m}"/>
+            <inertia ixx="${m*(y*y+z*z)/12}" ixy="0" ixz="0"
+                     iyy="${m*(x*x+z*z)/12}" iyz="0"
+                     izz="${m*(x*x+y*y)/12}"/>
+        </inertial>
+    </xacro:macro>
+
+    <xacro:macro name="cyl_inertia" params="m r h">
+        <inertial>
+            <mass value="${m}"/>
+            <inertia ixx="${m*(3*r*r+h*h)/12}" ixy="0" ixz="0"
+                     iyy="${m*(3*r*r+h*h)/12}" iyz="0"
+                     izz="${m*r*r/2}"/>
+        </inertial>
+    </xacro:macro>
+
+    <!-- ========================= BOAT LINK (DECK / URDF root) ========================= -->
+    <!-- KDL warns about inertia on root link — harmless, ignore it -->
+    <!-- Deck bottom on beam top = hull_top + beam_h -->
+    <link name="boat_link">
+        <xacro:box_inertia m="${deck_mass}" x="2.80" y="2.50" z="${deck_h}"/>
+        <visual>
+            <origin xyz="0 0 ${hull_top_z + beam_h + deck_h/2}" rpy="0 0 0"/>
+            <geometry>
+                <box size="2.80 2.50 ${deck_h}"/>
+            </geometry>
+            <material name="orange">
+                <color rgba="0.90 0.55 0.10 1.0"/>
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 ${hull_top_z + beam_h + deck_h/2}" rpy="0 0 0"/>
+            <geometry>
+                <box size="2.80 2.50 ${deck_h}"/>
+            </geometry>
+        </collision>
+    </link>
+
+    <!-- ========================= FLECHE DIRECTION (sur le pont) ========================= -->
+    <link name="arrow_link">
+        <inertial>
+            <mass value="0.01"/>
+            <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+        </inertial>
+        <visual>
+            <geometry>
+                <mesh filename="package://n3_urdf/meshes/arrow.dae"/>
+            </geometry>
+        </visual>
+    </link>
+
+    <joint name="arrow_joint" type="fixed">
+        <parent link="boat_link"/>
+        <child link="arrow_link"/>
+        <!-- Sur le dessus du pont, deck top = hull_top + beam_h + deck_h -->
+        <origin xyz="0 0 ${hull_top_z + beam_h + deck_h + 0.01}" rpy="0 0 0"/>
+    </joint>
+
+    <!-- ========================= FLOTTEUR PRINCIPAL (babord) ========================= -->
+    <!-- Hull z=0 (local) = hull top = world hull_top_z -->
+    <link name="hull_main_link">
+        <xacro:box_inertia m="${hull_main_mass}" x="6.225" y="0.55" z="0.45"/>
+        <visual>
+            <geometry>
+                <mesh filename="package://n3_urdf/meshes/hull_main.dae"/>
+            </geometry>
+        </visual>
+        <collision>
+            <geometry>
+                <box size="6.225 0.55 0.45"/>
+            </geometry>
+        </collision>
+    </link>
+
+    <joint name="hull_main_joint" type="fixed">
+        <parent link="boat_link"/>
+        <child link="hull_main_link"/>
+        <origin xyz="0 ${span/2} ${hull_top_z}" rpy="0 0 0"/>
+    </joint>
+
+    <!-- ========================= FLOTTEUR SECONDAIRE (tribord) ========================= -->
+    <link name="hull_small_link">
+        <xacro:box_inertia m="${hull_small_mass}" x="4.0" y="0.40" z="0.30"/>
+        <visual>
+            <geometry>
+                <mesh filename="package://n3_urdf/meshes/hull_small.dae"/>
+            </geometry>
+        </visual>
+        <collision>
+            <geometry>
+                <box size="4.0 0.40 0.30"/>
+            </geometry>
+        </collision>
+    </link>
+
+    <joint name="hull_small_joint" type="fixed">
+        <parent link="boat_link"/>
+        <child link="hull_small_link"/>
+        <origin xyz="0 ${-span/2} ${hull_top_z}" rpy="0 0 0"/>
+    </joint>
+
+    <!-- ========================= BARRES TRANSVERSALES ========================= -->
+    <!-- Beams on hull top, length = span (center to center of hulls) -->
+    <link name="crossbeam_fwd_link">
+        <xacro:box_inertia m="${cb_mass}" x="0.15" y="${span}" z="${beam_h}"/>
+        <visual>
+            <geometry>
+                <box size="0.15 ${span} ${beam_h}"/>
+            </geometry>
+            <material name="orange">
+                <color rgba="0.90 0.55 0.10 1.0"/>
+            </material>
+        </visual>
+        <collision>
+            <geometry>
+                <box size="0.15 ${span} ${beam_h}"/>
+            </geometry>
+        </collision>
+    </link>
+
+    <joint name="crossbeam_fwd_joint" type="fixed">
+        <parent link="boat_link"/>
+        <child link="crossbeam_fwd_link"/>
+        <origin xyz="1.25 0 ${hull_top_z + beam_h/2}" rpy="0 0 0"/>
+    </joint>
+
+    <link name="crossbeam_aft_link">
+        <xacro:box_inertia m="${cb_mass}" x="0.15" y="${span}" z="${beam_h}"/>
+        <visual>
+            <geometry>
+                <box size="0.15 ${span} ${beam_h}"/>
+            </geometry>
+            <material name="orange">
+                <color rgba="0.90 0.55 0.10 1.0"/>
+            </material>
+        </visual>
+        <collision>
+            <geometry>
+                <box size="0.15 ${span} ${beam_h}"/>
+            </geometry>
+        </collision>
+    </link>
+
+    <joint name="crossbeam_aft_joint" type="fixed">
+        <parent link="boat_link"/>
+        <child link="crossbeam_aft_link"/>
+        <origin xyz="-1.25 0 ${hull_top_z + beam_h/2}" rpy="0 0 0"/>
+    </joint>
+
+    <!-- ========================= MAT (sur flotteur principal) ========================= -->
+    <!-- Mast from hull top up to sail top: 0.40 (base) + 4.5 (sail) = 4.9 m -->
+    <xacro:property name="mast_h" value="4.90"/>
+    <link name="mast_link">
+        <xacro:cyl_inertia m="${mast_mass}" r="0.05" h="${mast_h}"/>
+        <visual>
+            <origin xyz="0 0 ${mast_h/2}" rpy="0 0 0"/>
+            <geometry>
+                <cylinder radius="0.05" length="${mast_h}"/>
+            </geometry>
+            <material name="mast_mat">
+                <color rgba="0.12 0.12 0.12 1.0"/>
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 ${mast_h/2}" rpy="0 0 0"/>
+            <geometry>
+                <cylinder radius="0.05" length="${mast_h}"/>
+            </geometry>
+        </collision>
+    </link>
+
+    <joint name="mast_joint" type="fixed">
+        <parent link="hull_main_link"/>
+        <child link="mast_link"/>
+        <!-- Mast bottom at hull top (z=0 in hull frame) -->
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+
+    <!-- ========================= WING SAIL (NACA 0015, 4.5 m) ========================= -->
+    <!--
+      Sail mesh: leading edge at x=0 (vertical, aligned with mast).
+      Chord extends aft (-X). No offset needed.
+    -->
+    <link name="sail_link">
+        <inertial>
+            <mass value="${sail_mass}"/>
+            <origin xyz="${-sail_chord/2} 0 2.25"/>
+            <inertia
+                    ixx="${sail_mass*(0.58*0.58+4.5*4.5)/12}" ixy="0" ixz="0"
+                    iyy="${sail_mass*(sail_chord*sail_chord+4.5*4.5)/12}" iyz="0"
+                    izz="${sail_mass*(sail_chord*sail_chord+0.58*0.58)/12}"/>
+        </inertial>
+        <visual>
+            <geometry>
+                <mesh filename="package://n3_urdf/meshes/sail.dae"/>
+            </geometry>
+        </visual>
+        <collision>
+            <origin xyz="${-sail_chord/2} 0 2.25" rpy="0 0 0"/>
+            <geometry>
+                <box size="${sail_chord} 0.58 4.5"/>
+            </geometry>
+        </collision>
+    </link>
+
+    <joint name="sail_joint" type="continuous">
+        <parent link="mast_link"/>
+        <child link="sail_link"/>
+        <origin xyz="0 0 0.40" rpy="0 0 0"/>
+        <axis xyz="0 0 1"/>
+        <dynamics damping="2.0" friction="0.5"/>
+    </joint>
+
+    <!-- ========================= SAFRAN (sur flotteur principal) ========================= -->
+    <link name="rudder_link">
+        <xacro:box_inertia m="${rudder_mass}" x="1.20" y="0.04" z="0.80"/>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry>
+                <mesh filename="package://n3_urdf/meshes/rudder.dae" scale="2.0 1.0 1.0"/>
+            </geometry>
+        </visual>
+        <collision>
+            <origin xyz="-0.60 0 -0.40" rpy="0 0 0"/>
+            <geometry>
+                <box size="1.20 0.04 0.80"/>
+            </geometry>
+        </collision>
+    </link>
+
+    <joint name="rudder_joint" type="continuous">
+        <parent link="hull_main_link"/>
+        <child link="rudder_link"/>
+        <origin xyz="-3.10 0 -0.10" rpy="0 0 0"/>
+        <axis xyz="0 0 1"/>
+        <dynamics damping="1.0" friction="0.3"/>
+    </joint>
+
+    <!-- ========================= CAPTEURS (poupe flotteur principal) ========================= -->
+    <!-- Sensor mast on main hull stern, carries GPS and anemometer -->
+    <link name="sensor_mast_link">
+        <xacro:cyl_inertia m="0.5" r="0.03" h="3.0"/>
+        <visual>
+            <origin xyz="0 0 1.5" rpy="0 0 0"/>
+            <geometry>
+                <cylinder radius="0.03" length="3.0"/>
+            </geometry>
+            <material name="sensor_mast_mat">
+                <color rgba="0.5 0.5 0.5 1.0"/>
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 1.5" rpy="0 0 0"/>
+            <geometry>
+                <cylinder radius="0.03" length="3.0"/>
+            </geometry>
+        </collision>
+    </link>
+
+    <joint name="sensor_mast_joint" type="fixed">
+        <parent link="hull_main_link"/>
+        <child link="sensor_mast_link"/>
+        <!-- Stern of main hull, on top -->
+        <origin xyz="-2.5 0 0" rpy="0 0 0"/>
+    </joint>
+
+    <!-- GPS link (on sensor mast, z=2.0 above hull top) -->
+    <link name="gps_link">
+        <xacro:box_inertia m="0.1" x="0.08" y="0.08" z="0.04"/>
+        <visual>
+            <geometry>
+                <box size="0.08 0.08 0.04"/>
+            </geometry>
+            <material name="gps_mat">
+                <color rgba="0.2 0.8 0.2 1.0"/>
+            </material>
+        </visual>
+    </link>
+
+    <joint name="gps_joint" type="fixed">
+        <parent link="sensor_mast_link"/>
+        <child link="gps_link"/>
+        <origin xyz="0 0 2.0" rpy="0 0 0"/>
+    </joint>
+
+    <!-- Anemometer link (top of sensor mast, z=3.0 above hull top) -->
+    <link name="anemo_link">
+        <xacro:box_inertia m="0.1" x="0.06" y="0.06" z="0.10"/>
+        <visual>
+            <geometry>
+                <cylinder radius="0.04" length="0.10"/>
+            </geometry>
+            <material name="anemo_mat">
+                <color rgba="0.8 0.8 0.2 1.0"/>
+            </material>
+        </visual>
+    </link>
+
+    <joint name="anemo_joint" type="fixed">
+        <parent link="sensor_mast_link"/>
+        <child link="anemo_link"/>
+        <origin xyz="0 0 3.0" rpy="0 0 0"/>
+    </joint>
+
+    <!-- ========================= GAZEBO ========================= -->
+    <gazebo reference="boat_link">
+        <material>Gazebo/Orange</material>
+    </gazebo>
+    <gazebo reference="hull_main_link">
+        <material>Gazebo/Blue</material>
+        <mu1>0.001</mu1>
+        <mu2>0.001</mu2>
+    </gazebo>
+    <gazebo reference="hull_small_link">
+        <material>Gazebo/TurquoiseGlow</material>
+        <mu1>0.001</mu1>
+        <mu2>0.001</mu2>
+    </gazebo>
+    <gazebo reference="crossbeam_fwd_link">
+        <material>Gazebo/Orange</material>
+    </gazebo>
+    <gazebo reference="crossbeam_aft_link">
+        <material>Gazebo/Orange</material>
+    </gazebo>
+    <gazebo reference="sail_link">
+        <material>Gazebo/Red</material>
+        <selfCollide>false</selfCollide>
+    </gazebo>
+    <gazebo reference="rudder_link">
+        <material>Gazebo/Orange</material>
+    </gazebo>
+    <gazebo>
+        <plugin name="joint_state_publisher"
+                filename="libgazebo_ros_joint_state_publisher.so">
+            <ros>
+                <remapping>~/out:=joint_states</remapping>
+            </ros>
+            <update_rate>50</update_rate>
+            <joint_name>sail_joint</joint_name>
+            <joint_name>rudder_joint</joint_name>
+        </plugin>
+    </gazebo>
+
+</robot>
