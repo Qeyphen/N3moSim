@@ -1,5 +1,0 @@
-path: /Users/kifen/Dev/n3mo/n3mosim_original/yolo
-train: images/train
-val: images/val
-nc: 1
-names: [buoy]
