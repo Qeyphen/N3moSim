@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 using System.IO;
 using Unity.Mathematics;
 using UnityEditor;
@@ -444,3 +445,5 @@ public class SplineToTexture : MonoBehaviour
 }
 
 
+
+#endif

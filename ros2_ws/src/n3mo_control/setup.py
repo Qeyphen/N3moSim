@@ -27,6 +27,7 @@ setup(
             'target_pose_publisher = n3mo_control.target_pose_publisher:main',
             'env_control = n3mo_control.env_control:main',
             'map_publisher = n3mo_control.map_publisher:main',
+            'dataset_sweep = n3mo_control.dataset_sweep:main',
         ],
     },
 )

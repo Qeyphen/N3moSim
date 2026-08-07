@@ -17,6 +17,10 @@ public class UrdfCameraPose : MonoBehaviour
     public Transform cameraTransform;
     public string cameraLinkName = "camera_link";
 
+    // last applied mount (ROS convention), for run metadata
+    [System.NonSerialized] public Vector3 MountXyz;
+    [System.NonSerialized] public Vector3 MountRpy;
+
     private bool applied;
 
     [Header("URDF source")]
@@ -107,6 +111,7 @@ public class UrdfCameraPose : MonoBehaviour
 
             Vector3 xyz = ParseTriple(o.GetAttribute("xyz"), Vector3.zero);
             Vector3 rpy = ParseTriple(o.GetAttribute("rpy"), Vector3.zero);
+            MountXyz = xyz; MountRpy = rpy;
 
             cam.localPosition = RosToUnityPosition(xyz);
             cam.localRotation = RosRpyToUnityRotation(rpy);

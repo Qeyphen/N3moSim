@@ -17,18 +17,4 @@ MonoBehaviour:
     color: {r: 0, g: 0, b: 1, a: 1}
   - label: dynamic_obstacle
     color: {r: 0, g: 1, b: 0, a: 1}
-  - label: Character
-    color: {r: 1, g: 0, b: 0, a: 1}
-  - label: vessel
-    color: {r: 1, g: 1, b: 1, a: 1}
-  - label: jet_ski
-    color: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
-  - label: kayak
-    color: {r: 1, g: 0.07843138, b: 0.5764706, a: 1}
-  - label: catamaran
-    color: {r: 1, g: 0.6470588, b: 0, a: 1}
-  - label: buoy
-    color: {r: 0.5803922, g: 0, b: 0.8274511, a: 1}
-  - label: New Label_1
-    color: {r: 0.5450981, g: 0.2705882, b: 0.07450981, a: 1}
   skyColor: {r: 0, g: 0, b: 0, a: 1}

@@ -142,8 +142,8 @@ class ScenarioGeneratorNode(Node):
             track_count=p.gen_track_count,
             density=p.gen_density,
             area_type=p.gen_area_type,
-            type_names=[],  # TODO: expose as string[] param if needed
-            type_weights=[],
+            type_names=list(p.gen_type_names),
+            type_weights=list(p.gen_type_weights),
             min_speed_kts=p.gen_min_speed_kts,
             max_speed_kts=p.gen_max_speed_kts,
             min_waypoints=p.gen_min_waypoints,

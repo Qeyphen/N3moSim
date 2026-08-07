@@ -47,8 +47,8 @@ MonoBehaviour:
   depthBefSub: 1
   displacementAmt: 3
   floaters: 4
-  waterDrag: 0.99
-  waterAngularDrag: 0.5
+  linearDrag: 3
+  angularDrag: 2
   water: {fileID: 0}
 --- !u!1 &3035498982224349006
 GameObject:
@@ -97,8 +97,8 @@ MonoBehaviour:
   depthBefSub: 1
   displacementAmt: 3
   floaters: 4
-  waterDrag: 0.99
-  waterAngularDrag: 0.5
+  linearDrag: 3
+  angularDrag: 2
   water: {fileID: 0}
 --- !u!1 &3910197477491901339
 GameObject:
@@ -147,8 +147,8 @@ MonoBehaviour:
   depthBefSub: 1
   displacementAmt: 3
   floaters: 4
-  waterDrag: 0.99
-  waterAngularDrag: 0.5
+  linearDrag: 3
+  angularDrag: 2
   water: {fileID: 0}
 --- !u!1 &6226830484638009544
 GameObject:
@@ -197,8 +197,8 @@ MonoBehaviour:
   depthBefSub: 1
   displacementAmt: 3
   floaters: 4
-  waterDrag: 0.99
-  waterAngularDrag: 0.5
+  linearDrag: 3
+  angularDrag: 2
   water: {fileID: 0}
 --- !u!1 &6594391811673153436
 GameObject:
@@ -329,6 +329,53 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 23c1ce4fb46143f46bc5cb5224c934f6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.RenderPipelines.HighDefinition.Runtime::UnityEngine.Rendering.HighDefinition.HDAdditionalCameraData
+  m_Version: 9
+  m_ObsoleteRenderingPath: 0
+  m_ObsoleteFrameSettings:
+    overrides: 0
+    enableShadow: 0
+    enableContactShadows: 0
+    enableShadowMask: 0
+    enableSSR: 0
+    enableSSAO: 0
+    enableSubsurfaceScattering: 0
+    enableTransmission: 0
+    enableAtmosphericScattering: 0
+    enableVolumetrics: 0
+    enableReprojectionForVolumetrics: 0
+    enableLightLayers: 0
+    enableExposureControl: 1
+    diffuseGlobalDimmer: 0
+    specularGlobalDimmer: 0
+    shaderLitMode: 0
+    enableDepthPrepassWithDeferredRendering: 0
+    enableTransparentPrepass: 0
+    enableMotionVectors: 0
+    enableObjectMotionVectors: 0
+    enableDecals: 0
+    enableRoughRefraction: 0
+    enableTransparentPostpass: 0
+    enableDistortion: 0
+    enablePostprocess: 0
+    enableOpaqueObjects: 0
+    enableTransparentObjects: 0
+    enableRealtimePlanarReflection: 0
+    enableMSAA: 0
+    enableAsyncCompute: 0
+    runLightListAsync: 0
+    runSSRAsync: 0
+    runSSAOAsync: 0
+    runContactShadowsAsync: 0
+    runVolumeVoxelizationAsync: 0
+    lightLoopSettings:
+      overrides: 0
+      enableDeferredTileAndCluster: 0
+      enableComputeLightEvaluation: 0
+      enableComputeLightVariants: 0
+      enableComputeMaterialVariants: 0
+      enableFptlForForwardOpaque: 0
+      enableBigTilePrepass: 0
+      isFptlEnabled: 0
   clearColorMode: 0
   backgroundColorHDR: {r: 0.025, g: 0.07, b: 0.19, a: 0}
   clearDepth: 1
@@ -409,53 +456,6 @@ MonoBehaviour:
       data1: 0
       data2: 0
   defaultFrameSettings: 0
-  m_Version: 9
-  m_ObsoleteRenderingPath: 0
-  m_ObsoleteFrameSettings:
-    overrides: 0
-    enableShadow: 0
-    enableContactShadows: 0
-    enableShadowMask: 0
-    enableSSR: 0
-    enableSSAO: 0
-    enableSubsurfaceScattering: 0
-    enableTransmission: 0
-    enableAtmosphericScattering: 0
-    enableVolumetrics: 0
-    enableReprojectionForVolumetrics: 0
-    enableLightLayers: 0
-    enableExposureControl: 1
-    diffuseGlobalDimmer: 0
-    specularGlobalDimmer: 0
-    shaderLitMode: 0
-    enableDepthPrepassWithDeferredRendering: 0
-    enableTransparentPrepass: 0
-    enableMotionVectors: 0
-    enableObjectMotionVectors: 0
-    enableDecals: 0
-    enableRoughRefraction: 0
-    enableTransparentPostpass: 0
-    enableDistortion: 0
-    enablePostprocess: 0
-    enableOpaqueObjects: 0
-    enableTransparentObjects: 0
-    enableRealtimePlanarReflection: 0
-    enableMSAA: 0
-    enableAsyncCompute: 0
-    runLightListAsync: 0
-    runSSRAsync: 0
-    runSSAOAsync: 0
-    runContactShadowsAsync: 0
-    runVolumeVoxelizationAsync: 0
-    lightLoopSettings:
-      overrides: 0
-      enableDeferredTileAndCluster: 0
-      enableComputeLightEvaluation: 0
-      enableComputeLightVariants: 0
-      enableComputeMaterialVariants: 0
-      enableFptlForForwardOpaque: 0
-      enableBigTilePrepass: 0
-      isFptlEnabled: 0
 --- !u!114 &340623586088476106
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -541,10 +541,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 16b72c22bee1b1d51b702e08d531efff, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DatasetCaptureScheduler
-  captureHz: 3
+  captureHz: 10
   capturing: 0
   controlTopic: /dataset/control
   toggleKey: 32
+  excludeOwnVessel: 1
 --- !u!1 &9209447519131762015
 GameObject:
   m_ObjectHideFlags: 0

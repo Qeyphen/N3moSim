@@ -342,21 +342,29 @@ def generate_scenario(
     """Generate a random scenario within the navigable area."""
     rng = random.Random(seed) if seed > 0 else random.Random()
 
-    if type_names and type_weights and len(type_names) == len(type_weights):
-        type_dist = list(zip(type_names, type_weights))
+    if type_names:
+        # Weights are optional now (even assignment ignores them); default to equal.
+        weights = type_weights if len(type_weights) == len(type_names) else [1.0] * len(type_names)
+        type_dist = list(zip(type_names, weights))
     else:
         type_dist = AREA_PRESETS.get(area_type, AREA_PRESETS["lake"])
 
     dist_names = [t[0] for t in type_dist]
-    dist_weights = [t[1] for t in type_dist]
 
     if track_count <= 0:
         area_km2 = nav_area.area_m2() / 1e6
         track_count = max(1, min(200, int(density * area_km2)))
 
+    # Even assignment: cycle a shuffled type list so every type appears equally, rather than
+    # weighted-random which lets some vessels dominate. Shuffled per scenario (different seed each
+    # regen) so which types fill a short scenario also rotates across regenerations.
+    shuffled = dist_names[:]
+    rng.shuffle(shuffled)
+    type_seq = [shuffled[i % len(shuffled)] for i in range(track_count)]
+
     tracks: list[TrackDef] = []
     for i in range(track_count):
-        type_name = rng.choices(dist_names, weights=dist_weights, k=1)[0]
+        type_name = type_seq[i]
         type_info = TRACK_TYPE_TABLE.get(type_name, TRACK_TYPE_TABLE["unknown"])
         type_value, default_min_spd, default_max_spd, heading_sigma = type_info
 

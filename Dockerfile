@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Python deps for the n3_sim scenario generator (n3_common params + YAML scenarios).
-RUN pip3 install --no-cache-dir pydantic pyyaml
+RUN pip3 install --no-cache-dir pydantic pyyaml pillow numpy
 
 ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 

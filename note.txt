@@ -1,9 +1,0 @@
-3. ML phases 2 → 5
-
-Phase 2 — Enrich labels. Make each frame richer/correct: ego-vessel exclusion (stop the boat boxing its own hull), full semantic classes (add water/sky to static/dynamic_obstacle), per-object metadata (range/bearing/relative-velocity from the 3D box + ego pose), camera intrinsics+extrinsics into each frame (needed to use 3D boxes/depth), and depth sanity (confirm EXR = metres).
-
-Phase 3 — Scale + domain randomization (this is where the generator pays off): randomize sea state/waves, time-of-day/sun, fog, water color, obstacle types/counts/positions (← the generator), camera jitter, sensor noise — seeded — and run headless batch generation (-batchmode) for thousands of frames across scenarios.
-
-Phase 4 — ROS temporal layer + packaging. Record a rosbag (ego pose, controls, /scene/objects, /sim/tracks) synced to image frames via a /dataset/frame {index, stamp} marker; package each session (images + masks + depth + rosbag + manifest → versioned zip).
-
-Phase 5 — Export + hygiene. Exporters (SOLO → COCO/YOLO boxes, palette-PNG masks, depth tensors, npz/WebDataset) + the tiny-box filter; leakage-free splits (split by scenario, not frame); manifest/data card; QC (class balance, label-overlay audits).

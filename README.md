@@ -67,6 +67,7 @@ Then press **Play** in Unity. The bridge and Unity connect automatically.
 | `/env/weather` | `std_msgs/String` | → Unity | preset: clear/cloudy/overcast/foggy/stormy |
 | `/env/randomize` | `std_msgs/Int32` | → Unity | randomise conditions (0 = random seed, else seeded) |
 | `/env/state` | `std_msgs/String` | Unity → | current conditions as JSON (log per capture) |
+| `/camera/resolution` | `std_msgs/String` | → Unity | capture output pixels: `WxH` (`1920x1080`) or `360p/720p/1080p/4k` |
 
 **Coordinate conventions (important):**
 - Control channel (`target_pose`): `position.x` = Unity x, `position.z` = Unity z, `y = 0`.
@@ -299,6 +300,52 @@ python3 tools/depth_preview.py           # auto-finds the latest SOLO dataset
 editor, lower it (e.g. 5) or run a built player. Capture is on-demand: start/stop via
 `/dataset/control` (`std_msgs/Bool`) or the `R` hotkey.
 
+### Capture resolution (output image pixels)
+
+The output image size is configurable via the **`CaptureResolution`** component (add it to any
+persistent object; it auto-finds the PerceptionCamera and gives it a RenderTexture of the chosen
+size). Set **Width/Height** in the Inspector, or over ROS:
+
+```bash
+docker compose exec ros_bridge bash -lc "source /opt/ros/humble/setup.bash && \
+  ros2 topic pub --once /camera/resolution std_msgs/msg/String '{data: 720p}'"
+```
+
+`data` accepts a preset `360p / 720p / 1080p / 4k` (all 16:9, so the 60° FOV is preserved) or an
+exact `WxH` like `1920x1080`. Verify with `python3 tools/camera_info.py` — the `image dimension`
+line shows the new size and the pixel `fx/fy` scale with it while the FOV stays 60°. Generate
+datasets at different resolutions by setting the size, recording, then repeating at another size.
+
+### Run metadata (data card)
+
+On **every recording STOP**, `DatasetCaptureScheduler` writes a `run_metadata_<timestamp>.json`
+into the SOLO dataset folder — a data card of that run. Start/stop again → another timestamped
+file, so each record is documented separately. It captures (live, at stop time):
+
+- **capture**: target + **actual** Hz, frames, duration
+- **image**: width/height, total pixels, megapixels, aspect
+- **camera**: FOV (vertical/horizontal), pixel intrinsics (fx/fy/cx/cy, scaled to the resolution),
+  near/far, pose, and the URDF mount (`xyz`/`rpy`) if `UrdfCameraPose` is present
+- **environment**: time-of-day, weather, cloudiness, fog, wind, wave, rain, randomize seed
+- **scene**: object count, ego control mode, the `Scene.json` environment block
+- **labels**: the classes present (from the scene's `Labeling` components)
+- **system**: Unity version, platform
+
+Example:
+```json
+{
+  "run_id": "solo_1",
+  "capture": { "target_hz": 10, "actual_hz": 8.13, "frames": 36, "duration_s": 4.43 },
+  "image":   { "width": 1920, "height": 1080, "pixels": 2073600, "aspect": 1.78 },
+  "camera":  { "fov_vertical_deg": 60, "intrinsics_px": { "fx": 935.3, "fy": 935.3, "cx": 960, "cy": 540 } },
+  "environment": { "time_of_day": 12, "weather": "clear", "fog": 0.05, "seed": -1 },
+  "labels":  { "classes": ["buoy", "kayak", "paddleboard", "..."] }
+}
+```
+(`actual_hz` below `target_hz` means the editor couldn't sustain the rate at that resolution —
+lower the resolution or run a built player. Scenario-generator params are ROS-side and not yet
+included.)
+
 ### Label water and sky — `marine_surface.py`
 
 HDRP water is transparent (doesn't render into Perception's segmentation pass) and sky has no
@@ -468,6 +515,8 @@ Assets/Scripts/            Unity controllers + publishers
   TrackSpawner.cs            subscribes /sim/tracks, spawns/moves/despawns traffic by type
   EgoPosePublisher.cs        publishes the ego boat pose to /sim/boat/pose
   DatasetCaptureScheduler.cs Perception dataset capture (ROS/hotkey controlled)
+  CaptureResolution.cs       set output image pixels (Inspector + /camera/resolution)
+  RunMetadata.cs             writes run_metadata_<ts>.json (data card) per recording stop
 Assets/RosMessages/N3New/  hand-written Track / TrackArray C# messages (n3_new_msgs)
 ros2_ws/src/n3mo_control/  ROS 2 package (target_pose_publisher, tools/)
 ros2_ws/src/n3_sim/        vendored scenario generator (scenario_generator, map_manager,

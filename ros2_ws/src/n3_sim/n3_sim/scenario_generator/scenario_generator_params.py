@@ -39,6 +39,16 @@ class ScenarioGeneratorModel(BaseModel):
     gen_area_type: AreaType = Field(
         default="lake", description="Preset: lake, coastal, harbor, open_sea."
     )
+    gen_type_names: list[str] = Field(
+        default=[],
+        description="Explicit vessel types to spawn (empty = use the area preset). "
+        "Assigned evenly across tracks so every type appears equally.",
+    )
+    gen_type_weights: list[float] = Field(
+        default=[],
+        description="Optional per-type weights matching gen_type_names "
+        "(empty = equal). Kept for compatibility; even assignment ignores them.",
+    )
     gen_autostart: bool = Field(
         default=True, description="Load and start scenario after generation."
     )

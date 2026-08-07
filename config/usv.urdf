@@ -1,16 +1,14 @@
 <?xml version="1.0"?>
-<!-- USV description. Camera mount = base_link -> camera_link joint origin,
-     in ROS REP-103 convention (x forward, y left, z up, m/rad); Unity reads it. -->
 <robot name="usv">
 
-  <link name="base_link"/>       <!-- the boat body -->
-  <link name="camera_link"/>     <!-- the POV camera -->
+  <link name="base_link"/>
+  <link name="camera_link"/>
 
   <joint name="camera_mount" type="fixed">
     <parent link="base_link"/>
     <child  link="camera_link"/>
-    <!-- pitch the camera down slightly by setting rpy, e.g. rpy="0 0.1 0" -->
-    <origin xyz="3 0 1" rpy="0 0 0"/>
+    <!-- pitch the camera down slightly by setting rpy-->
+    <origin xyz="3 10 0" rpy="0 0 0"/>
   </joint>
 
 </robot>

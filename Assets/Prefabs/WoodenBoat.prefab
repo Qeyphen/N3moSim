@@ -407,6 +407,7 @@ GameObject:
   - component: {fileID: 8971477304313207369}
   - component: {fileID: 2307617391735444723}
   - component: {fileID: 7758067816261615037}
+  - component: {fileID: 3480352036800387877}
   m_Layer: 0
   m_Name: WoodenBoat
   m_TagString: Untagged
@@ -492,3 +493,20 @@ MonoBehaviour:
   maxSpeed: 8
   linearDrag: 0.5
   angularDrag: 1.5
+--- !u!114 &3480352036800387877
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8710027555711194158}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8b33f0bc2b78db642a758f07826d0dd0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Perception.Runtime::UnityEngine.Perception.GroundTruth.LabelManagement.Labeling
+  labels:
+  - dynamic_obstacle
+  - wooden_boat
+  useAutoLabeling: 0
+  autoLabelingSchemeType: 

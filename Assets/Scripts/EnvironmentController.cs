@@ -239,18 +239,21 @@ public class EnvironmentController : MonoBehaviour
     public void SetCloudiness(float v) { cloudiness = Mathf.Clamp01(v); Apply(); PublishState(); }
     public void SetRain(float v)       { rain = Mathf.Clamp01(v);       Apply(); PublishState(); }
 
+    [System.NonSerialized] public int lastSeed = -1;   // last Randomize seed, for run metadata
+
     public void Randomize(int seed)
     {
+        lastSeed = seed;
         var rng = seed == 0 ? new System.Random() : new System.Random(seed);
         timeOfDay = 6f + (float)rng.NextDouble() * 12f;   // 06:00–18:00 so it stays daylit
         string name = PresetNames[rng.Next(PresetNames.Length)];
         var p = Presets[name];
         weather    = name;
         cloudiness = Jitter(rng, p.cloud);
-        fog        = Jitter(rng, p.fog);
+        fog        = (float)rng.NextDouble();   // randomize fog across the full 0..1 range
         wind       = Jitter(rng, p.wind);
         waveHeight = Jitter(rng, p.wave);
-        rain       = Jitter(rng, p.rain);
+        rain       = 0f;                        // no rain in the dataset — never randomize it
         Apply();
         PublishState();
         Debug.Log($"[Environment] randomize seed={seed} -> {weather} @ {timeOfDay:F1}h");

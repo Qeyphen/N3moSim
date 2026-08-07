@@ -20,6 +20,8 @@ public class DatasetCaptureScheduler : MonoBehaviour
     [Header("Control")]
     [Tooltip("ROS topic (std_msgs/Bool): true = start recording, false = stop.")]
     public string controlTopic = "/dataset/control";
+    [Tooltip("ROS topic (std_msgs/Int32): frames captured this recording (for the sweep to stop at a target).")]
+    public string framesTopic = "/dataset/frames";
     [Tooltip("Keyboard key that toggles recording on/off.")]
     public Key toggleKey = Key.R;
 
@@ -44,6 +46,7 @@ public class DatasetCaptureScheduler : MonoBehaviour
     {
         ros = ROSConnection.GetOrCreateInstance();
         ros.Subscribe<BoolMsg>(controlTopic, OnControl);
+        ros.RegisterPublisher<Int32Msg>(framesTopic);
         Debug.Log($"[DatasetCapture] Ready. ROS '{controlTopic}' (true=start/false=stop), " +
                   $"hotkey '{toggleKey}', rate {captureHz} Hz.");
 
@@ -76,6 +79,7 @@ public class DatasetCaptureScheduler : MonoBehaviour
 
         perceptionCamera.RequestCapture();
         frameCount++;
+        ros.Publish(framesTopic, new Int32Msg(frameCount));
     }
 
     void SetRecording(bool on)
@@ -94,6 +98,7 @@ public class DatasetCaptureScheduler : MonoBehaviour
             float elapsed = Mathf.Max(1e-3f, Time.time - recordStartTime);
             Debug.Log($"[DatasetCapture] ■ STOP — {frameCount} frames in {elapsed:F1}s " +
                       $"= {frameCount / elapsed:F1} Hz actual (target {captureHz}).");
+            RunMetadata.Write(perceptionCamera, captureHz, frameCount / elapsed, frameCount, elapsed);
         }
     }
 }

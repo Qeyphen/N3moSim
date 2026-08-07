@@ -163,7 +163,8 @@ class PydanticParamsBase(Generic[ModelT]):
 
         # Resolve annotation to base type (unwrap Optional etc.)
         annotation = field_info.annotation
-        if get_origin(annotation) is not None:
+        origin = get_origin(annotation)
+        if origin is not None:
             args = get_args(annotation)
             base_type = next((a for a in args if a in (int, float)), None)
         else:
@@ -173,6 +174,11 @@ class PydanticParamsBase(Generic[ModelT]):
         # Without this, rclpy raises InvalidParameterTypeException at declare time,
         # before _coerce ever runs.
         if base_type is float:
+            descriptor.dynamic_typing = True
+
+        # List params (e.g. list[str]) often default to []; rclpy can't infer a type
+        # from an empty list, so declare them dynamically-typed.
+        if origin in (list, tuple):
             descriptor.dynamic_typing = True
 
         has_bounds = any(v is not None for v in (ge, le, gt, lt))

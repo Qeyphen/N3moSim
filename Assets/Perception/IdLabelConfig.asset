@@ -16,29 +16,38 @@ MonoBehaviour:
   - label: buoy
     id: 1
     hierarchyRelation: 0
-  - label: vessel
+  - label: jet_ski
     id: 2
     hierarchyRelation: 0
-  - label: Character
+  - label: kayak
     id: 3
     hierarchyRelation: 0
-  - label: dynamic_obstacle
+  - label: catamaran
     id: 4
     hierarchyRelation: 0
-  - label: jet_ski
+  - label: fishing_boat
     id: 5
     hierarchyRelation: 0
-  - label: kayak
+  - label: raft
     id: 6
     hierarchyRelation: 0
-  - label: catamaran
+  - label: wooden_boat
     id: 7
     hierarchyRelation: 0
-  - label: static_obstacle
+  - label: paddle_board
     id: 8
     hierarchyRelation: 0
-  - label: New Label_1
+  - label: motor_boat
     id: 9
+    hierarchyRelation: 0
+  - label: ferry
+    id: 10
+    hierarchyRelation: 0
+  - label: pedalo
+    id: 11
+    hierarchyRelation: 0
+  - label: debris
+    id: 12
     hierarchyRelation: 0
   autoAssignIds: 1
   startingLabelId: 1

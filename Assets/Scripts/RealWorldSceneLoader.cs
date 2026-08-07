@@ -70,7 +70,13 @@ public class RealWorldSceneLoader : MonoBehaviour
         mesh.SetTriangles(tris, 0);
         mesh.RecalculateNormals();
         GetComponent<MeshFilter>().sharedMesh = mesh;
-        if (landMaterial != null) GetComponent<MeshRenderer>().sharedMaterial = landMaterial;
+
+        if (landMaterial == null)   // avoid pink: default land material
+        {
+            landMaterial = new Material(Shader.Find("HDRP/Lit"));
+            landMaterial.SetColor("_BaseColor", new Color(0.36f, 0.48f, 0.30f));
+        }
+        GetComponent<MeshRenderer>().sharedMaterial = landMaterial;
 
         Debug.Log($"[RealWorldScene] built '{sceneName}' land: {verts.Count / 4} blocks, cell {cell:F1} m.");
     }

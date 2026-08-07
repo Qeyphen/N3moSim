@@ -43,22 +43,37 @@ def frame_boxes(cap):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("root", nargs="?", default=None)
+    ap.add_argument("roots", nargs="*", help="one or more SOLO dirs (default: latest). Multiple "
+                    "dirs are merged with one shared class list.")
     ap.add_argument("--out", default="yolo", help="output dataset dir (default ./yolo)")
     ap.add_argument("--min", type=int, default=10, help="drop boxes with smaller side < this (px)")
     ap.add_argument("--val-frac", type=float, default=0.2, help="fraction of frames for val")
+    ap.add_argument("--classes", default=None, help="comma-separated class list to FIX id order "
+                    "(default: union of classes found across all dirs)")
     args = ap.parse_args()
 
-    root = args.root or find_latest_solo()
-    if not root:
-        print("No SOLO dataset found. Pass the path: solo_to_yolo.py <dir>")
-        return
-    frames = sorted(glob.glob(os.path.join(root, "**", "*frame_data.json"), recursive=True))
-    if not frames:
-        print(f"no *frame_data.json under {root}")
+    roots = args.roots or ([find_latest_solo()] if find_latest_solo() else [])
+    roots = [r for r in roots if r]
+    if not roots:
+        print("No SOLO dataset found. Pass the path(s): solo_to_yolo.py <dir> [<dir> ...]")
         return
 
-    names = collect_class_names(frames)
+    # (frame_data.json, dir-tag) across every root; the tag prefixes filenames so identical
+    # sequence folder names (both runs have sequence.0/…) don't collide in the merged output.
+    items = []
+    for r in roots:
+        tag = os.path.basename(os.path.normpath(r))
+        for fp in sorted(glob.glob(os.path.join(r, "**", "*frame_data.json"), recursive=True)):
+            items.append((fp, tag))
+    if not items:
+        print(f"no *frame_data.json under {roots}")
+        return
+    items.sort()
+
+    if args.classes:
+        names = [c.strip() for c in args.classes.split(",") if c.strip()]
+    else:
+        names = collect_class_names([fp for fp, _ in items])   # union across all dirs
     if not names:
         print("no 2D bounding boxes found in the dataset")
         return
@@ -69,9 +84,9 @@ def main():
         os.makedirs(os.path.join(out, sub), exist_ok=True)
 
     every = max(1, int(round(1.0 / args.val_frac))) if args.val_frac > 0 else 0
-    n_boxes = n_dropped = n_train = n_val = 0
+    n_boxes = n_dropped = n_unknown = n_train = n_val = 0
 
-    for i, fp in enumerate(sorted(frames)):
+    for i, (fp, tag) in enumerate(items):
         data = json.load(open(fp))
         base_dir = os.path.dirname(fp)
         split = "val" if (every and i % every == 0) else "train"
@@ -87,8 +102,8 @@ def main():
             if not W or not H:
                 continue
 
-            # flat name to avoid collisions across sequence folders
-            stem = f"{os.path.basename(base_dir)}_{os.path.splitext(os.path.basename(rgb))[0]}"
+            # flat name, prefixed by the solo dir tag, to avoid collisions across dirs/sequences
+            stem = f"{tag}_{os.path.basename(base_dir)}_{os.path.splitext(os.path.basename(rgb))[0]}"
             lines = []
             for b in frame_boxes(cap):
                 x, y = b["origin"]
@@ -96,7 +111,10 @@ def main():
                 if min(w, h) < args.min:
                     n_dropped += 1
                     continue
-                cid = class_id[b.get("labelName", "object")]
+                cid = class_id.get(b.get("labelName", "object"))
+                if cid is None:   # label not in a fixed --classes list
+                    n_unknown += 1
+                    continue
                 cx, cy = (x + w / 2) / W, (y + h / 2) / H
                 lines.append(f"{cid} {cx:.6f} {cy:.6f} {w / W:.6f} {h / H:.6f}")
                 n_boxes += 1
@@ -116,10 +134,10 @@ def main():
         f.write(f"nc: {len(names)}\n")
         f.write("names: [" + ", ".join(names) + "]\n")
 
-    print(f"dataset: {root}")
+    print(f"dirs: {roots}")
     print(f"classes ({len(names)}): {names}")
     print(f"frames -> train {n_train}, val {n_val}")
-    print(f"boxes kept {n_boxes}, tiny dropped {n_dropped} (min side {args.min}px)")
+    print(f"boxes kept {n_boxes}, tiny dropped {n_dropped}, unknown-label dropped {n_unknown} (min side {args.min}px)")
     print(f"\nwrote YOLO dataset -> {out}\n  data.yaml, images/{{train,val}}, labels/{{train,val}}")
     print("train:  yolo detect train data=" + os.path.join(out, "data.yaml") + " model=yolo11n.pt")
 
