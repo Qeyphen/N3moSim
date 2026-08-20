@@ -22,6 +22,10 @@ public class DatasetCaptureScheduler : MonoBehaviour
     public string controlTopic = "/dataset/control";
     [Tooltip("ROS topic (std_msgs/Int32): frames captured this recording (for the sweep to stop at a target).")]
     public string framesTopic = "/dataset/frames";
+    [Tooltip("ROS topic (std_msgs/Float32): set capture rate in Hz for the next/current recording.")]
+    public string captureRateTopic = "/dataset/capture_hz";
+    [Tooltip("ROS topic (std_msgs/String): current scenario metadata as JSON.")]
+    public string scenarioInfoTopic = "/dataset/scenario_info";
     [Tooltip("Keyboard key that toggles recording on/off.")]
     public Key toggleKey = Key.R;
 
@@ -35,20 +39,27 @@ public class DatasetCaptureScheduler : MonoBehaviour
     private float            timer;
     private int              frameCount;
     private float            recordStartTime;
+    private string           cameraKey;
+    private int              captureRequests;
+    private bool             warnedMissingSolo;
 
     void Awake()
     {
         perceptionCamera = GetComponent<PerceptionCamera>();
-        Debug.Log($"[DatasetCapture] Awake — PerceptionCamera found: {perceptionCamera != null}");
+        cameraKey = RunMetadata.ResolveCameraKey(perceptionCamera);
+        Debug.Log($"[DatasetCapture:{cameraKey}] Awake — PerceptionCamera found: {perceptionCamera != null}");
     }
 
     void Start()
     {
         ros = ROSConnection.GetOrCreateInstance();
         ros.Subscribe<BoolMsg>(controlTopic, OnControl);
+        ros.Subscribe<Float32Msg>(captureRateTopic, OnCaptureRate);
+        ros.Subscribe<StringMsg>(scenarioInfoTopic, OnScenarioInfo);
         ros.RegisterPublisher<Int32Msg>(framesTopic);
-        Debug.Log($"[DatasetCapture] Ready. ROS '{controlTopic}' (true=start/false=stop), " +
-                  $"hotkey '{toggleKey}', rate {captureHz} Hz.");
+        UnityDefaultsDump.WriteOnce(perceptionCamera);
+        Debug.Log($"[DatasetCapture:{cameraKey}] Ready. ROS '{controlTopic}' (true=start/false=stop), " +
+                  $"hotkey '{toggleKey}', rate {captureHz} Hz, persistentDataPath='{Application.persistentDataPath}'.");
 
         if (excludeOwnVessel)
         {
@@ -58,12 +69,23 @@ public class DatasetCaptureScheduler : MonoBehaviour
             {
                 own.labels.Clear();
                 own.RefreshLabeling();   // no labels -> not captured by any labeler
-                Debug.Log($"[DatasetCapture] Cleared ego-vessel labels on '{own.name}' (won't self-label).");
+                Debug.Log($"[DatasetCapture:{cameraKey}] Cleared ego-vessel labels on '{own.name}' (won't self-label).");
             }
         }
     }
 
     void OnControl(BoolMsg msg) => SetRecording(msg.data);
+    void OnScenarioInfo(StringMsg msg) => ScenarioMetadataContext.SetCurrentFromJson(msg.data);
+    void OnCaptureRate(Float32Msg msg)
+    {
+        if (msg.data <= 0f)
+        {
+            Debug.LogWarning($"[DatasetCapture:{cameraKey}] Ignoring invalid capture rate {msg.data} Hz.");
+            return;
+        }
+        captureHz = msg.data;
+        Debug.Log($"[DatasetCapture:{cameraKey}] captureHz set to {captureHz:F2} Hz via ROS.");
+    }
 
     void Update()
     {
@@ -78,8 +100,18 @@ public class DatasetCaptureScheduler : MonoBehaviour
         timer -= interval;
 
         perceptionCamera.RequestCapture();
+        captureRequests++;
         frameCount++;
         ros.Publish(framesTopic, new Int32Msg(frameCount));
+
+        if (!warnedMissingSolo && captureRequests >= 3 && !RunMetadata.TryGetLatestSoloDir(out _))
+        {
+            warnedMissingSolo = true;
+            Debug.LogWarning(
+                $"[DatasetCapture:{cameraKey}] Requested {captureRequests} captures, but no SOLO dataset folder exists yet under " +
+                $"'{Application.persistentDataPath}'. Check that this camera's PerceptionCamera is enabled and uses Capture Trigger Mode = Manual."
+            );
+        }
     }
 
     void SetRecording(bool on)
@@ -90,15 +122,22 @@ public class DatasetCaptureScheduler : MonoBehaviour
         if (on)
         {
             frameCount = 0;
+            captureRequests = 0;
+            warnedMissingSolo = false;
             recordStartTime = Time.time;
-            Debug.Log($"[DatasetCapture] ▶ START recording at {captureHz} Hz.");
+            UnityDefaultsDump.FlushToSolo();
+            ScenarioMetadataContext.WriteSnapshot("start", perceptionCamera);
+            Debug.Log($"[DatasetCapture:{cameraKey}] ▶ START recording at {captureHz} Hz.");
         }
         else
         {
             float elapsed = Mathf.Max(1e-3f, Time.time - recordStartTime);
-            Debug.Log($"[DatasetCapture] ■ STOP — {frameCount} frames in {elapsed:F1}s " +
-                      $"= {frameCount / elapsed:F1} Hz actual (target {captureHz}).");
+            string soloDir = RunMetadata.TryGetLatestSoloDir(out string latestSolo) ? latestSolo : "(none)";
+            Debug.Log($"[DatasetCapture:{cameraKey}] ■ STOP — {frameCount} frames in {elapsed:F1}s " +
+                      $"= {frameCount / elapsed:F1} Hz actual (target {captureHz}), soloDir={soloDir}.");
+            UnityDefaultsDump.FlushToSolo();
             RunMetadata.Write(perceptionCamera, captureHz, frameCount / elapsed, frameCount, elapsed);
+            ScenarioMetadataContext.WriteSnapshot("end", perceptionCamera);
         }
     }
 }

@@ -12,10 +12,9 @@ import sys
 from PIL import Image, ImageDraw
 
 BBOX2D = "BoundingBox2DAnnotation"
-MIN_BOX_SIDE = 10  # px; boxes whose smaller side is below this are skipped (too tiny to train on)
 
 
-def process_frame(frame_json_path):
+def process_frame(frame_json_path, min_box_side):
     with open(frame_json_path) as f:
         data = json.load(f)
     base = os.path.dirname(frame_json_path)
@@ -44,7 +43,7 @@ def process_frame(frame_json_path):
         for b in boxes:
             x, y = b["origin"]
             w, h = b["dimension"]
-            if min(w, h) < MIN_BOX_SIDE:        # skip tiny boxes (far/occluded specks)
+            if min_box_side is not None and min(w, h) < min_box_side:
                 dropped += 1
                 continue
             draw.rectangle([x, y, x + w, y + h], outline=(255, 0, 0), width=3)
@@ -53,7 +52,7 @@ def process_frame(frame_json_path):
 
         out_path = os.path.join(out_dir, os.path.basename(rgb_name))
         img.save(out_path)
-        print(f"  wrote {out_path}  ({drawn} boxes, {dropped} tiny skipped)")
+        print(f"  wrote {out_path} [{cap.get('id', 'camera')}]  ({drawn} boxes, {dropped} tiny skipped)")
 
 
 def find_latest_solo():
@@ -67,7 +66,35 @@ def find_latest_solo():
 
 
 def main():
-    root = sys.argv[1] if len(sys.argv) > 1 else find_latest_solo()
+    args = sys.argv[1:]
+    min_box_side = None
+    root = None
+
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg == "--min-box-side":
+            if i + 1 >= len(args):
+                print("missing value for --min-box-side")
+                return
+            try:
+                min_box_side = int(args[i + 1])
+            except ValueError:
+                print("--min-box-side must be an integer")
+                return
+            if min_box_side < 0:
+                print("--min-box-side must be >= 0")
+                return
+            i += 2
+            continue
+        if root is None:
+            root = arg
+            i += 1
+            continue
+        print(f"unrecognized argument: {arg}")
+        return
+
+    root = root or find_latest_solo()
     if not root:
         print("No SOLO dataset found automatically. Pass the path: solo_preview.py <dir>")
         return
@@ -77,9 +104,13 @@ def main():
         print(f"no *frame_data.json found under {root}")
         return
     print(f"dataset: {root}\nfound {len(frames)} frame(s)")
+    if min_box_side is None:
+        print("box filter: none")
+    else:
+        print(f"box filter: smaller side >= {min_box_side}px")
     for fp in sorted(frames):
         print(os.path.relpath(fp, root))
-        process_frame(fp)
+        process_frame(fp, min_box_side)
     print("done — open the 'preview/' subfolder(s) to view annotated frames.")
 
 

@@ -57,8 +57,9 @@ Everything crossing the Unity↔ROS boundary is a ROS topic tunnelled through th
 | `/map` | `nav_msgs/OccupancyGrid` | Unity → ROS | once, **latched** | `OccupancyGridPublisher` | scenario generator (as costmap), RViz |
 | `/sim/tracks` | `n3_new_msgs/TrackArray` | ROS → Unity | 10 Hz, RELIABLE | `scenario_generator` | `TrackSpawner` |
 | `/sim/tracks/markers` | `visualization_msgs/MarkerArray` | ROS → RViz | on each track msg | `tracks_markers_node` | RViz |
-| `/scene/objects` | `n3_new_msgs/TrackArray` | Unity → ROS | 10 Hz | `DynamicObstaclePublisher` | external consumers / debug |
+| `/scene/objects` | `n3_new_msgs/TrackArray` | Unity → ROS | 10 Hz | `DynamicObstaclePublisher` | scenario generator exclusions, external consumers, debug |
 | `/dataset/control` | `std_msgs/Bool` | ROS → Unity | on demand | CLI / you | `DatasetCaptureScheduler` |
+| `/dataset/capture_hz` | `std_msgs/Float32` | ROS → Unity | on demand | scenario batch tooling / CLI | `DatasetCaptureScheduler` |
 | `/env/time_of_day`, `/env/fog`, `/env/wind`, `/env/wave`, `/env/cloudiness`, `/env/rain` | `std_msgs/Float32` | ROS → Unity | on demand | `env_control` / CLI | `EnvironmentController` |
 | `/env/weather` (String), `/env/randomize` (Int32) | `std_msgs/*` | ROS → Unity | on demand | `env_control` / CLI | `EnvironmentController` |
 | `/env/state` | `std_msgs/String` | Unity → ROS | on change | `EnvironmentController` | logging / capture |
@@ -166,6 +167,10 @@ The ego boat has **one** active controller at a time, chosen by a switcher.
   quaternion only seeds the first frame.
 - The `TrackType` enum (0–15) mirrors the ROS Track type constants. `prefabOverrides` is the
   type→prefab table; **repeat a type to register colour/variant alternatives**.
+- Runtime debug counters (`totalMessagesReceived`, `lastMessageTrackCount`, `activeTrackCount`)
+  make it obvious whether Unity is receiving traffic even when prefab setup is wrong. If a
+  prefab cannot be resolved, the spawner falls back to a primitive placeholder instead of
+  silently dropping the track.
 
 **`KinematicBob.cs`** — physics-free bob/sway for traffic.
 - Traffic is kinematic, so `WaterFloater` (forces) does nothing on it. This oscillates the
@@ -193,7 +198,10 @@ published **once, latched**, on `/map`. This is the **costmap** the scenario gen
 (`[RequireComponent(PerceptionCamera)]`, sits on the boat's POV camera).
 - **Subscribes** `std_msgs/Bool` on `/dataset/control` (true=start, false=stop); also an `R`
   hotkey and an Inspector toggle.
-- Uses **manual capture** (`perceptionCamera.RequestCapture()` at `captureHz=3`) rather than
+- **Subscribes** `std_msgs/Float32` on `/dataset/capture_hz` to update the capture rate live
+  without restarting Unity.
+- Uses **manual capture** (`perceptionCamera.RequestCapture()` at `captureHz`, default 10 Hz)
+  rather than
   Perception's Scheduled mode, so live physics/water isn't frozen.
 - `excludeOwnVessel=true` clears the **ego boat's own `Labeling`** in `Start` so the boat
   doesn't label its own hull.
@@ -239,6 +247,8 @@ The core is the **scenario generator**, which turns a costmap into moving traffi
 
 **`scenario_generator/scenario_generator_node.py`** (`ScenarioGeneratorNode`)
 - **Subscribes** `/map/costmap_static` (the OccupancyGrid; remapped from Unity's `/map`).
+- **Subscribes** `/scene/objects` and converts authored Unity objects into exclusion zones, so
+  generated traffic avoids spawning on top of static/authored scene content.
 - **Publishes** `/sim/tracks` (`TrackArray`) on a timer at `publish_rate_hz` (10 Hz).
 - On the **first costmap** (with `gen_on_first_costmap:=true`) it auto-generates a scenario
   (`on_costmap` → `_generate`).
@@ -252,7 +262,8 @@ The core is the **scenario generator**, which turns a costmap into moving traffi
 2. **`generate_scenario`** — seeded RNG; for each of `track_count` tracks: pick a type from an
    **area preset** (lake/coastal/harbor/open_sea) weighted distribution, pick a speed from the
    type's range, then do a **random walk** of waypoints across navigable water (with boundary
-   reflection so it stays on water), and assign spawn/despawn times. Writes a YAML scenario.
+   reflection so it stays on water), while rejecting candidate points inside authored-object
+   exclusion zones or too close to other generated tracks. Writes a YAML scenario.
 3. **`interpolate_track`** — given a track and a time, finds the current segment and linearly
    interpolates position; **heading = `atan2(dy, dx)`** (the path tangent = direction of
    travel), and velocity from speed × unit tangent. Returns a `TrackState`.
@@ -328,8 +339,8 @@ endpoint latch/None-guard patches.
 **In Unity:** a `PerceptionCamera` on the boat's POV camera, with labelers (BoundingBox2D/3D,
 Instance & Semantic Segmentation, Depth) and two label configs in `Assets/Perception/`
 (`IdLabelConfig` for detection ids, `SemanticSegmentationLabelConfig` for class→colour).
-Capture Trigger = **Manual**; `DatasetCaptureScheduler` requests captures at 3 Hz while
-recording. Output is a **SOLO** dataset under
+Capture Trigger = **Manual**; `DatasetCaptureScheduler` requests captures while recording, at a
+rate that can be changed live over `/dataset/capture_hz`. Output is a **SOLO** dataset under
 `~/.config/unity3d/<Company>/<Product>/solo*/` (Linux) or
 `~/Library/Application Support/...` (macOS), finalised when Play stops.
 
@@ -343,11 +354,17 @@ recording. Output is a **SOLO** dataset under
 | `semantic_preview.py` | semantic mask | per-class coverage % |
 | `marine_surface.py` | pose + intrinsics + seg | **water/sky labels** via horizon synthesis: colored preview + class-index mask (0=water,1=sky,2=obstacle) in `marine_seg/` |
 | `filter_boxes.py` | 2D boxes | drops tiny boxes from the dataset (`--apply`) |
-| `solo_to_yolo.py` | 2D boxes + RGB | **YOLO detection dataset** (`images/`+`labels/`+`data.yaml`, train/val split) |
+| `solo_to_yolo.py` | 2D boxes + RGB | **YOLO detection dataset** (`images/`+`labels/`+`data.yaml`, simple frame split) |
 
 **Known limit:** HDRP water is a transparent surface that **doesn't render into Perception's
 depth or segmentation passes** — so water has no depth/class from the engine. `marine_surface.py`
 fills that geometrically (the Phase-3 horizon-synthesis approach).
+
+**Recommended recording mode:** many short scenarios, not one long sweep. The host-side tools
+`tools/generate_scenarios.py` and `tools/run_scenario_batch.py` generate a manifest of short
+scenario specs, then execute them by fixing weather/time, setting the generator seed, updating
+`/dataset/capture_hz`, and invoking `dataset_sweep` in duration-based mode with no mid-run
+environment changes.
 
 **Camera FOV:** the POV camera is configured to **60° vertical / ~92° horizontal** at 1280×720,
 which fixes the intrinsics (fx=fy≈623.5 px, principal point centred) baked into every frame. See
@@ -391,15 +408,14 @@ transform. See **`doc/camera-urdf.md`** for the design and verified extrinsics.
 
 ---
 
-## 12. Roadmap (phases) — for context
+## 12. Roadmap (historical phases) — for context
 
 - **Phase 0** — Spike: proved Unity Perception works on HDRP/Unity 6.3.
 - **Phase 1** (`doc/phase-1.md`) — Vertical slice: end-to-end capture on the boat POV.
 - **Phase 2** (`doc/phase-2.md`) — Enrich labels: ego exclusion, metric depth, camera
   intrinsics/extrinsics, range/bearing/closing, semantic classes; found the HDRP-water gap.
-- **Phase 3** (`doc/todo.md`) — Scale + realism: marine-surface ground truth (horizon
-  synthesis), traffic variety (kayak colours, swimmer), domain randomization, headless batch.
-- **Phase 4/5** — ROS temporal layer + packaging; exporters (COCO/YOLO), splits, QC.
+- The active remediation plan for the current dataset-generation work is tracked in the project
+  root [`todo.md`](../todo.md), not in this historical phase list.
 
 ---
 
@@ -417,7 +433,7 @@ Assets/Scripts/
   EgoPosePublisher.cs        /sim/boat/pose
   DynamicObstaclePublisher.cs /scene/objects (authored ego+buoys)
   OccupancyGridPublisher.cs  /map (latched costmap)
-  DatasetCaptureScheduler.cs Perception capture, /dataset/control
+  DatasetCaptureScheduler.cs Perception capture, /dataset/control, /dataset/capture_hz
   UrdfCameraPose.cs          mounts the POV camera from config/usv.urdf (not hardcoded)
   EnvironmentController.cs   procedural weather + time-of-day, ROS-controllable
   BoatController.cs          (legacy standalone arcade controller)
@@ -435,7 +451,8 @@ ros2_ws/src/
   n3_new_msgs/    Track.msg, TrackArray.msg (compiled into the image)
 
 tools/            solo_preview, depth_preview, camera_info, range_bearing,
-                  semantic_preview, marine_surface
+                  semantic_preview, marine_surface, generate_scenarios,
+                  run_scenario_batch
 config/           Scene.json, n3mo.rviz
 Dockerfile, docker-compose.yml
 doc/              phase-1.md, phase-2.md, todo.md, architecture.md (this file)

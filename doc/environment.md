@@ -117,6 +117,21 @@ docker compose exec ros_bridge bash -lc "source /opt/ros/humble/setup.bash && \
 
 ---
 
+## Dataset-generation policy
+
+For the current dataset workflow, weather and time of day should be treated as
+**scenario-level inputs**, not continuously changing variables inside one recording.
+
+- Within a single short scenario, the environment should stay fixed.
+- Variation happens **between** scenarios, driven by the host-side scenario manifest.
+- `tools/run_scenario_batch.py` applies one fixed `weather` and `time_of_day` per scenario,
+  then runs `dataset_sweep` with mid-run environment randomization disabled.
+
+This keeps clips physically coherent and avoids the abrupt lighting/weather jumps that were
+showing up in long continuous sweeps.
+
+---
+
 ## Notes / troubleshooting
 
 - **Fog looks clear at low values** — correct; it's near-invisible below ~0.5 by design. Push
@@ -127,5 +142,5 @@ docker compose exec ros_bridge bash -lc "source /opt/ros/humble/setup.bash && \
 - **Clouds** — driven by Cloud Layer opacity if that's what the scene has (this project), else
   Volumetric Clouds density. The cloud override must exist on a Volume and be enabled in HDRP
   Frame Settings.
-- **`env_control` needs `docker compose build`** (new entry point); the raw `ros2 topic pub`
-  path works without a rebuild.
+- **`env_control` needs `docker compose build`** if the container image does not already include
+  the entry point; the raw `ros2 topic pub` path works without a rebuild.

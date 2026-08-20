@@ -1,5 +1,9 @@
 # Synthetic Perception Dataset — TODO
 
+> Historical note: this file tracks the earlier perception-roadmap work. The active
+> implementation plan for the current dataset-remediation effort lives in the project root
+> [`todo.md`](../todo.md).
+
 ## Goal
 Generate a **production-grade synthetic labeled perception dataset** from the Unity marine
 sim to train an ML model for **obstacle detection / segmentation on an autonomous sailboat**,
@@ -33,6 +37,16 @@ on demand and packaged for training.
 ---
 
 ## Phase 3 — Scale + realism (domain randomization)
+- [x] Short-scenario manifest workflow:
+      `tools/generate_scenarios.py` generates scenario specs and
+      `tools/run_scenario_batch.py` executes them through Docker/ROS/Unity with fixed per-scenario
+      environment settings and duration-based `dataset_sweep` runs.
+- [x] Keep weather/time stable within a scenario by driving them once per scenario and disabling
+      mid-run environment randomization in the batch workflow.
+- [x] Live capture-rate control via `/dataset/capture_hz`, so the scenario manifest can specify
+      the sampling rate explicitly.
+- [x] Keep generated traffic away from authored scene objects and from overlapping generated
+      spawns by using `/scene/objects` as exclusion zones in the scenario generator.
 - [ ] **Marine-surface ground truth (carried from P2):** make the HDRP water participate in
       Perception's depth + semantic-seg passes — it currently writes neither (transparent
       surface skipped by the labeler passes). Two routes: (a) **horizon synthesis** — derive

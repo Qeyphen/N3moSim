@@ -15,10 +15,14 @@ public class CaptureResolution : MonoBehaviour
     [Header("ROS")]
     public bool enableRos = true;
     public string resolutionTopic = "/camera/resolution";
+    [Tooltip("Apply this resolution to every Perception camera found in the scene.")]
+    public bool applyToAllPerceptionCameras = true;
 
     private Camera cam;
-    private RenderTexture rt;
+    private readonly System.Collections.Generic.Dictionary<Camera, RenderTexture> renderTargets =
+        new System.Collections.Generic.Dictionary<Camera, RenderTexture>();
     private bool applied;
+    private int appliedPerceptionCameraCount;
 
     void Start()
     {
@@ -27,8 +31,20 @@ public class CaptureResolution : MonoBehaviour
         TryApply();
     }
 
-    // The camera spawns with the boat at runtime, so keep trying until it exists.
-    void Update() { if (!applied) TryApply(); }
+    // Perception cameras spawn with the boat at runtime, so keep trying until they exist and
+    // re-apply if the camera count changes (for multi-camera rigs).
+    void Update()
+    {
+        if (!applyToAllPerceptionCameras)
+        {
+            if (!applied) TryApply();
+            return;
+        }
+
+        int currentCount = FindObjectsByType<PerceptionCamera>(FindObjectsSortMode.None).Length;
+        if (!applied || currentCount != appliedPerceptionCameraCount)
+            TryApply();
+    }
 
     void OnResolution(StringMsg m)
     {
@@ -58,38 +74,88 @@ public class CaptureResolution : MonoBehaviour
 
     void TryApply()
     {
+        if (applyToAllPerceptionCameras)
+        {
+            var pcs = FindObjectsByType<PerceptionCamera>(FindObjectsSortMode.None);
+            if (pcs == null || pcs.Length == 0) return;
+            ApplyToAll(pcs);
+            appliedPerceptionCameraCount = pcs.Length;
+            applied = pcs.Length > 0;
+            return;
+        }
+
         if (cam == null)
         {
             var pc = FindFirstObjectByType<PerceptionCamera>();
             if (pc != null) cam = pc.GetComponent<Camera>();
         }
         if (cam == null) return;
-        Apply();
+        ApplyToCamera(cam);
         applied = true;
     }
 
     [ContextMenu("Apply Resolution")]
     void Apply()
     {
+        if (applyToAllPerceptionCameras)
+        {
+            var pcs = FindObjectsByType<PerceptionCamera>(FindObjectsSortMode.None);
+            if (pcs == null || pcs.Length == 0)
+            {
+                Debug.LogWarning("[CaptureResolution] no PerceptionCamera found.");
+                return;
+            }
+            ApplyToAll(pcs);
+            return;
+        }
+
         if (cam == null)
         {
             var pc = FindFirstObjectByType<PerceptionCamera>();
             cam = pc != null ? pc.GetComponent<Camera>() : null;
         }
         if (cam == null) { Debug.LogWarning("[CaptureResolution] no PerceptionCamera found."); return; }
+        ApplyToCamera(cam);
+    }
 
-        var old = rt;
-        rt = new RenderTexture(Mathf.Max(16, width), Mathf.Max(16, height), 24) { name = $"Capture_{width}x{height}" };
+    void ApplyToAll(PerceptionCamera[] pcs)
+    {
+        foreach (var pc in pcs)
+        {
+            if (pc == null) continue;
+            var targetCam = pc.GetComponent<Camera>();
+            if (targetCam != null)
+                ApplyToCamera(targetCam);
+        }
+        appliedPerceptionCameraCount = pcs.Length;
+        applied = pcs.Length > 0;
+    }
+
+    void ApplyToCamera(Camera targetCam)
+    {
+        if (targetCam == null) return;
+
+        renderTargets.TryGetValue(targetCam, out var old);
+        var rt = new RenderTexture(Mathf.Max(16, width), Mathf.Max(16, height), 24)
+        {
+            name = $"Capture_{targetCam.name}_{width}x{height}"
+        };
         rt.Create();
-        cam.targetTexture = rt;
+        targetCam.targetTexture = rt;
+        renderTargets[targetCam] = rt;
         DestroyRT(old);
-        Debug.Log($"[CaptureResolution] capture size = {width}x{height} on '{cam.name}'.");
+        Debug.Log($"[CaptureResolution] capture size = {width}x{height} on '{targetCam.name}'.");
     }
 
     void OnDestroy()
     {
-        if (cam != null && cam.targetTexture == rt) cam.targetTexture = null;
-        DestroyRT(rt);
+        foreach (var kv in renderTargets)
+        {
+            if (kv.Key != null && kv.Key.targetTexture == kv.Value)
+                kv.Key.targetTexture = null;
+            DestroyRT(kv.Value);
+        }
+        renderTargets.Clear();
     }
 
     static void DestroyRT(RenderTexture t)

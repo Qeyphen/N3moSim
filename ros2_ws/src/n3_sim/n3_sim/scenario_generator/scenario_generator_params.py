@@ -49,6 +49,11 @@ class ScenarioGeneratorModel(BaseModel):
         description="Optional per-type weights matching gen_type_names "
         "(empty = equal). Kept for compatibility; even assignment ignores them.",
     )
+    gen_type_counts_json: str = Field(
+        default="",
+        description="Optional JSON object mapping type name to desired count, "
+        'for example {"sailboat": 4, "kayak": 2}. If set, this overrides even assignment.',
+    )
     gen_autostart: bool = Field(
         default=True, description="Load and start scenario after generation."
     )
@@ -78,6 +83,42 @@ class ScenarioGeneratorModel(BaseModel):
         default=10.0,
         ge=0.0,
         description="Safety margin from costmap obstacles in meters.",
+    )
+    gen_scene_object_clearance_m: float = Field(
+        default=12.0,
+        ge=0.0,
+        description="Clearance radius from authored scene objects published on /scene/objects.",
+    )
+    gen_track_separation_m: float = Field(
+        default=20.0,
+        ge=0.0,
+        description="Minimum separation between generated track spawn points.",
+    )
+    gen_bias_to_ego_view: bool = Field(
+        default=True,
+        description="Bias a portion of generated traffic to spawn ahead of the ego boat.",
+    )
+    gen_ego_view_fraction: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Fraction of generated tracks whose initial spawn should be near the ego view cone.",
+    )
+    gen_ego_view_min_range_m: float = Field(
+        default=35.0,
+        ge=0.0,
+        description="Minimum distance from the ego boat for view-biased traffic spawns.",
+    )
+    gen_ego_view_max_range_m: float = Field(
+        default=120.0,
+        ge=1.0,
+        description="Maximum distance from the ego boat for view-biased traffic spawns.",
+    )
+    gen_ego_view_fov_deg: float = Field(
+        default=120.0,
+        ge=10.0,
+        le=180.0,
+        description="Forward cone width used when spawning view-biased traffic.",
     )
     gen_random_seed: int = Field(
         default=0, ge=0, description="RNG seed (0 = non-reproducible)."

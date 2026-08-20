@@ -9,12 +9,15 @@ from pathlib import Path
 
 import n3_common.ros as ros
 import rclpy
-from n3_common.topics.sim_topics import COSTMAP_STATIC, SIM_TRACKS
+from n3_common.topics.sim_topics import COSTMAP_STATIC, SIM_POSE, SIM_TRACKS
 from rclpy.node import Node
 from std_srvs.srv import Trigger
+from n3_new_msgs.msg import TrackArray as SceneTrackArray
 
 from .scenario_generator_params import ScenarioGeneratorParams
 from .scenario_model import (
+    EgoSpawnBias,
+    ExclusionZone,
     TRACK_TYPE_TABLE,
     Scenario,
     TrackDef,
@@ -54,6 +57,8 @@ class ScenarioGeneratorNode(Node):
         self.scenario: Scenario | None = None
         self.start_time = self.get_clock().now()
         self.costmap_msg: ros.OccupancyGrid | None = None
+        self.scene_objects: list[ExclusionZone] = []
+        self.ego_pose_xyh: tuple[float, float, float] | None = None
 
         # Injected tracks added at runtime via MCP bridge
         self.injected_tracks: list[TrackDef] = []
@@ -70,6 +75,18 @@ class ScenarioGeneratorNode(Node):
             COSTMAP_STATIC.name,
             self.on_costmap,
             COSTMAP_STATIC.qos,
+        )
+        self.create_subscription(
+            ros.PoseStamped,
+            SIM_POSE.name,
+            self.on_ego_pose,
+            SIM_POSE.qos,
+        )
+        self.create_subscription(
+            SceneTrackArray,
+            "/scene/objects",
+            self.on_scene_objects,
+            10,
         )
 
         self.create_service(
@@ -111,6 +128,33 @@ class ScenarioGeneratorNode(Node):
             self.log.info("Auto-generating from first costmap (gen_on_first_costmap=true)")
             self._generate()
 
+    def on_scene_objects(self, msg: SceneTrackArray) -> None:
+        clearance = self.params.p.gen_scene_object_clearance_m
+        zones: list[ExclusionZone] = []
+        for track in msg.tracks:
+            zones.append(
+                ExclusionZone(
+                    x=float(track.pose.position.x),
+                    y=float(track.pose.position.y),
+                    radius_m=clearance + self.scene_track_radius(track.type),
+                )
+            )
+        self.scene_objects = zones
+        if zones:
+            self.log.debug(f"updated {len(zones)} scene-object exclusion zones")
+
+    def on_ego_pose(self, msg: ros.PoseStamped) -> None:
+        q = msg.pose.orientation
+        heading_rad = math.atan2(
+            2.0 * (q.w * q.z + q.x * q.y),
+            1.0 - 2.0 * (q.y * q.y + q.z * q.z),
+        )
+        self.ego_pose_xyh = (
+            float(msg.pose.position.x),
+            float(msg.pose.position.y),
+            float(heading_rad),
+        )
+
     def _generate(self) -> str | None:
         """Generate + save a scenario from the current costmap. Returns the path, or None."""
         p = self.params.p
@@ -136,6 +180,29 @@ class ScenarioGeneratorNode(Node):
             margin_m=p.gen_margin_m,
         )
 
+        ego_spawn_bias: EgoSpawnBias | None = None
+        if p.gen_bias_to_ego_view and self.ego_pose_xyh is not None:
+            ego_spawn_bias = EgoSpawnBias(
+                x=self.ego_pose_xyh[0],
+                y=self.ego_pose_xyh[1],
+                heading_rad=self.ego_pose_xyh[2],
+                near_fraction=p.gen_ego_view_fraction,
+                min_range_m=p.gen_ego_view_min_range_m,
+                max_range_m=max(p.gen_ego_view_min_range_m, p.gen_ego_view_max_range_m),
+                fov_deg=p.gen_ego_view_fov_deg,
+            )
+            self.log.info(
+                "Applying ego-view spawn bias: "
+                f"fraction={ego_spawn_bias.near_fraction:.2f}, "
+                f"range={ego_spawn_bias.min_range_m:.1f}-{ego_spawn_bias.max_range_m:.1f}m, "
+                f"fov={ego_spawn_bias.fov_deg:.1f}deg"
+            )
+        elif p.gen_bias_to_ego_view:
+            self.log.warn(
+                "Ego-view spawn bias requested but no /sim/boat/pose received yet; "
+                "falling back to global traffic placement"
+            )
+
         scenario = generate_scenario(
             nav_area,
             duration_s=p.gen_duration_s,
@@ -150,6 +217,10 @@ class ScenarioGeneratorNode(Node):
             max_waypoints=p.gen_max_waypoints,
             spawn_spread_s=p.gen_spawn_spread_s,
             seed=p.gen_random_seed,
+            scene_exclusions=self.scene_objects,
+            track_separation_m=p.gen_track_separation_m,
+            type_counts=self.parse_type_counts_json(p.gen_type_counts_json),
+            ego_spawn_bias=ego_spawn_bias,
         )
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -162,6 +233,37 @@ class ScenarioGeneratorNode(Node):
         if p.gen_autostart:
             self._load_scenario(str(output_path))
         return str(output_path)
+
+    def parse_type_counts_json(self, raw: str) -> dict[str, int]:
+        if not raw.strip():
+            return {}
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            self.log.warn(f"invalid gen_type_counts_json: {exc}")
+            return {}
+        if not isinstance(data, dict):
+            self.log.warn("gen_type_counts_json must decode to an object")
+            return {}
+
+        parsed: dict[str, int] = {}
+        for key, value in data.items():
+            try:
+                count = int(value)
+            except (TypeError, ValueError):
+                self.log.warn(f"ignoring non-integer type count for '{key}': {value!r}")
+                continue
+            if count > 0:
+                parsed[str(key)] = count
+        return parsed
+
+    @staticmethod
+    def scene_track_radius(track_type: int) -> float:
+        radii = {
+            1: 8.0,   # sailboat / ego boat
+            11: 4.0,  # buoy
+        }
+        return radii.get(int(track_type), 5.0)
 
     def on_generate_scenario(
         self,

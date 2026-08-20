@@ -51,21 +51,22 @@ python3 tools/marine_surface.py --flip      # if water/sky come out swapped
 An Ultralytics-YOLO **detection** dataset from the SOLO 2D boxes:
 ```
 yolo/
-  images/train/*.png   images/val/*.png
-  labels/train/*.txt   labels/val/*.txt
+  images/all/*.png     labels/all/*.txt
   data.yaml
+  dataset_manifest.json
 ```
 Each label file has one line per box: `class_id x_center y_center width height`, all
-**normalized 0–1** (YOLO convention). Class ids are assigned once across the whole dataset so
-they're consistent between train and val. Tiny boxes (smaller side `< --min` px) are dropped
+**normalized 0–1** (YOLO convention). Class ids are assigned once across the whole dataset.
+Tiny boxes (smaller side `< --min` px) are dropped
 (same policy as `filter_boxes.py` / `solo_preview.py`).
 
 ### Run
 ```bash
-python3 tools/solo_to_yolo.py                       # -> ./yolo, min 10px, 20% val
-python3 tools/solo_to_yolo.py --out yolo --min 10 --val-frac 0.2
+python3 tools/solo_to_yolo.py                       # -> ./yolo, no split by default
+python3 tools/solo_to_yolo.py --split scenario --val-frac 0.2 --out yolo
 ```
-It prints the class list, train/val counts, and boxes kept/dropped, then writes `data.yaml`.
+It prints the class list, split counts, and boxes kept/dropped, then writes `data.yaml` and
+`dataset_manifest.json`.
 
 ### data.yaml (example)
 ```yaml
@@ -83,9 +84,11 @@ yolo detect train data=/abs/path/yolo/data.yaml model=yolo11n.pt epochs=50 imgsz
 ```
 
 ### Notes
-- **Split is a simple every-Nth-frame** train/val split. For leakage-free evaluation you should
-  split **by scenario**, not by frame (adjacent frames are near-duplicates) — that's the
-  Phase-5 hygiene step; this exporter gives a working baseline.
+- **Default export makes no split.** It writes `images/all` and `labels/all`, so downstream
+  tooling can preserve scenario grouping and split later.
+- If you need a split at export time, use `--split scenario` so whole input roots are assigned
+  to train/val together. `--split frame` exists only for compatibility and is not the preferred
+  evaluation path.
 - Water/sky are **not** in the YOLO output (they're regions, not detection boxes). If you later
   want YOLO **segmentation** (`-seg`) with water/sky polygons, that's a separate export from the
   `marine_classes` masks.
@@ -120,3 +123,9 @@ python3 tools/marine_surface.py
 ```
 `solo_to_yolo.py` reads the same `frame_data.json` that `filter_boxes.py` rewrote, so the YOLO
 dataset excludes the tiny + submerged boxes automatically.
+
+If you are using the newer scenario-manifest flow, the practical sequence is:
+
+1. Generate and run short scenarios with `tools/generate_scenarios.py` and `tools/run_scenario_batch.py`.
+2. Keep each scenario's outputs grouped together for later splitting.
+3. Run `filter_boxes.py`, `marine_surface.py`, and `solo_to_yolo.py` as post-processing steps.

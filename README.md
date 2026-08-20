@@ -67,6 +67,8 @@ Then press **Play** in Unity. The bridge and Unity connect automatically.
 | `/env/weather` | `std_msgs/String` | → Unity | preset: clear/cloudy/overcast/foggy/stormy |
 | `/env/randomize` | `std_msgs/Int32` | → Unity | randomise conditions (0 = random seed, else seeded) |
 | `/env/state` | `std_msgs/String` | Unity → | current conditions as JSON (log per capture) |
+| `/dataset/capture_hz` | `std_msgs/Float32` | → Unity | update dataset capture rate live |
+| `/dataset/scenario_info` | `std_msgs/String` | → Unity | current scenario metadata as JSON for capture bookkeeping |
 | `/camera/resolution` | `std_msgs/String` | → Unity | capture output pixels: `WxH` (`1920x1080`) or `360p/720p/1080p/4k` |
 
 **Coordinate conventions (important):**
@@ -121,7 +123,7 @@ docker compose exec ros_bridge bash -lc \
 
 # watch live boat positions
 docker compose exec ros_bridge bash -lc \
- "source /opt/ros/humble/setup.bash && ros2 topic echo /dynamic_obstacles"
+ "source /opt/ros/humble/setup.bash && ros2 topic echo /sim/boat/pose"
 
 # map metadata only (don't echo the huge data array); latched, so --once returns it
 docker compose exec ros_bridge bash -lc \
@@ -129,7 +131,7 @@ docker compose exec ros_bridge bash -lc \
 
 # publish rate
 docker compose exec ros_bridge bash -lc \
- "source /opt/ros/humble/setup.bash && ros2 topic hz /dynamic_obstacles"
+ "source /opt/ros/humble/setup.bash && ros2 topic hz /sim/tracks"
 ```
 
 > **Tip — shell shortcut.** Add this to `~/.zshrc` (or `~/.bashrc`) to skip the boilerplate.
@@ -139,16 +141,16 @@ docker compose exec ros_bridge bash -lc \
 > dros() { docker exec -it n3mo_bridge bash -lc \
 >   "source /opt/ros/humble/setup.bash && source /root/ros2_ws/install/setup.bash && ros2 $*"; }
 > ```
-> Then: `dros topic list`, `dros topic echo /dynamic_obstacles`,
+> Then: `dros topic list`, `dros topic echo /sim/tracks`,
 > `dros launch n3mo_control target_pose.launch.py x:=-190 z:=-110`.
 
 ---
 
 ## 6. View the map (terminal tools)
 
-What each tool shows: `/map` is the **static** layer (buoys); `/dynamic_obstacles` is the
-**live** layer (boats). `view_map.py`/`save_map.py` show only the static map;
-`view_live.py` overlays both.
+What each tool shows: `/map` is the **static** layer (buoys + authored obstacles in the grid);
+`/sim/tracks` is the **live** generated traffic layer. `view_map.py`/`save_map.py` show only
+the static map; `view_live.py` overlays static occupancy with live traffic.
 
 ### Live scene — static + moving boats (colour, headless)
 ```bash
@@ -233,7 +235,7 @@ Taxonomy: segmentation `water / sky / static_obstacle / dynamic_obstacle`; detec
    + labelers (BoundingBox2D/3D, Instance, Semantic, Depth) assigned to those configs;
    **Capture Trigger Mode = Manual**; render to a **1280×720** Render Texture (fixes
    resolution + keeps it off the main view).
-4. **Add `DatasetCaptureScheduler`** to that camera — `Capture Hz = 3`,
+4. **Add `DatasetCaptureScheduler`** to that camera — `Capture Hz = 10` by default,
    `Control Topic = /dataset/control`.
 
 ### Start / stop recording
@@ -295,10 +297,48 @@ python3 tools/depth_preview.py           # auto-finds the latest SOLO dataset
 ### Capture rate
 
 `DatasetCaptureScheduler.captureHz` defaults to **10 Hz**, matching the scenario generator's
-`/sim/tracks` rate, so image samples line up with the traffic updates. On `STOP` it logs the
-**actual** achieved rate (`… = 9.8 Hz actual (target 10)`) — if HDRP can't sustain 10 in the
-editor, lower it (e.g. 5) or run a built player. Capture is on-demand: start/stop via
-`/dataset/control` (`std_msgs/Bool`) or the `R` hotkey.
+`/sim/tracks` rate, so image samples line up with the traffic updates. You can change it live by
+publishing to `/dataset/capture_hz` (`std_msgs/Float32`), which is what the scenario-batch
+workflow does. On `STOP` it logs the **actual** achieved rate (`… = 9.8 Hz actual (target 10)`)
+if HDRP can't sustain the target in the editor, lower it (e.g. 5) or run a built player.
+Capture is on-demand: start/stop via `/dataset/control` (`std_msgs/Bool`) or the `R` hotkey.
+
+### Recommended dataset workflow: short scenarios
+
+The preferred path is now **many short, isolated scenarios**, not one long continuous sweep.
+That addresses the current dataset issues:
+
+- scenarios stop cleanly after a fixed duration
+- weather and time of day stay stable inside a scenario
+- capture rate is explicit per scenario
+- train/val splitting can happen later **by scenario**, not by frame
+- the sweep node can re-pick targets when the ego boat stalls or a target becomes invalid
+
+Generate a scenario manifest on the host:
+```bash
+python3 tools/generate_scenarios.py --count 20 --duration 20 --capture-hz 8 --out scenarios.json
+```
+
+Run some or all scenarios from that manifest:
+```bash
+python3 tools/run_scenario_batch.py scenarios.json
+python3 tools/run_scenario_batch.py scenarios.json --limit 1
+```
+
+What the two scripts do:
+
+- `tools/generate_scenarios.py` only writes a JSON manifest of scenario specs
+- `tools/run_scenario_batch.py` reads that manifest and, for each scenario:
+  - ensures `ros_bridge` and `scenario` are running
+  - sets a fixed environment (`weather`, `time_of_day`)
+  - sets the generator seed
+  - sets traffic density and class mix for that scenario
+  - publishes `/dataset/capture_hz`
+  - publishes `/dataset/scenario_info`
+  - runs `dataset_sweep` in **duration mode** with no mid-run weather or traffic randomization
+
+If you want a one-off manual sweep instead of the manifest flow, `dataset_sweep` still exists,
+but it should now be treated as the low-level runner that the batch script drives.
 
 ### Capture resolution (output image pixels)
 
@@ -363,11 +403,28 @@ Outputs per frame: `*_marine_seg.png` (colored preview) and `*_marine_classes.pn
 Convert the SOLO 2D boxes to an Ultralytics-YOLO **detection** dataset (boxes come from Unity's
 labeler — no manual boxing):
 ```bash
-python3 tools/solo_to_yolo.py                       # -> ./yolo (min 10px, 20% val)
-python3 tools/solo_to_yolo.py --out yolo --min 10 --val-frac 0.2
+python3 tools/solo_to_yolo.py                       # -> ./yolo, no split by default
+python3 tools/solo_to_yolo.py --split scenario --val-frac 0.2 --out yolo
 ```
-Produces `yolo/{images,labels}/{train,val}` + `data.yaml`. Train with
+By default it preserves the raw export in `images/all` and `labels/all`, plus a
+`dataset_manifest.json` that records scenario/source-root identity per exported frame.
+Optional split modes are:
+
+- `--split frame` for the old every-Nth-frame split
+- `--split scenario` to assign whole input roots to train/val
+
+Train with
 `yolo detect train data=yolo/data.yaml model=yolo11n.pt`. See `doc/water-sky-and-yolo.md`.
+
+### Metadata outputs
+
+Current runs produce three metadata layers:
+
+- Unity startup/default dump: `unity_defaults_<timestamp>.json`
+- Unity per-scenario and per-recording files inside the SOLO output:
+  - `scenario_start_<scenario_id>_<timestamp>.json`
+  - `scenario_end_<scenario_id>_<timestamp>.json`
+  - `run_metadata_<timestamp>.json`
 
 ---
 
@@ -486,8 +543,13 @@ Key generator params (`--ros-args -p name:=value`):
 | `gen_on_first_costmap` | auto-generate when the costmap (`/map`) arrives |
 | `gen_random_seed` | reproducible scenarios (0 = random) |
 
+The generator now also consumes `/scene/objects` and treats authored Unity objects as exclusion
+zones, so generated traffic does not spawn on top of buoys or other static/authored scene items.
+It also enforces separation between generated tracks at spawn time.
+
 Traffic **thins as tracks finish their paths**, then repopulates when the scenario loops —
-use `gen_spawn_spread_s > 0` for a steady population.
+use `gen_spawn_spread_s > 0` for a steady population in free-running mode. For dataset work,
+prefer short scenario manifests instead of relying on looping.
 
 > **Testing without the real map:** `map_manager` can publish a blank navigable square instead,
 > centered anywhere (e.g. on the ego boat at ENU `(0, -300)`):
@@ -531,10 +593,13 @@ tools/semantic_preview.py  per-class semantic-segmentation coverage (water/sky/o
 tools/marine_surface.py    label water/sky via horizon synthesis -> marine_seg/ (preview + class mask)
 tools/filter_boxes.py      drop tiny 2D boxes from the dataset (--apply)
 tools/solo_to_yolo.py      export SOLO 2D boxes -> Ultralytics YOLO dataset (images/labels/data.yaml)
+tools/generate_scenarios.py build scenario manifests for short dataset runs
+tools/run_scenario_batch.py execute scenario manifests through Docker/ROS/Unity
 tools/env_control (ros)    set weather/time over ROS (see doc/environment.md)
 docker-compose.yml         ros_bridge; `--profile rviz` adds scenario engine + RViz
 Dockerfile                 ROS 2 Humble + ROS-TCP-Endpoint + n3_sim/n3_common/n3_new_msgs (+ patches)
 ```
 
 Requires the **com.unity.perception** package (for §9). The scenario generator (§10) is
-vendored under `ros2_ws/src/` — see [`doc/todo.md`](doc/todo.md) for the dataset roadmap.
+vendored under `ros2_ws/src/`. The current implementation plan for dataset remediation lives in
+[`todo.md`](todo.md); the older perception-phase notes remain in [`doc/`](doc/).

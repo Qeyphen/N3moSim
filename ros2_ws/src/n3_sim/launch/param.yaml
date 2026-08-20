@@ -52,7 +52,7 @@ scenario_generator_node:
     # Generation (used by /sim/generate_scenario service)
     gen_output_file: "/ws/n3_sim/launch/scenario_generated.yaml"
     gen_duration_s: 600.0               # Scenario duration in seconds.
-    gen_track_count: 12                  # Number of tracks (0 = use density).
+    gen_track_count: 16                  # Number of tracks (0 = use density).
     gen_density: 5.0                    # Tracks per km².
     gen_area_type: "lake"               # lake | coastal | harbor | open_sea.
     gen_autostart: true                 # Load and start after generation.
@@ -62,6 +62,13 @@ scenario_generator_node:
     gen_max_waypoints: 6
     gen_spawn_spread_s: 5.0            # Tracks spawn randomly within [0, N] seconds.
     gen_margin_m: 10.0                  # Safety margin from costmap obstacles.
+    gen_scene_object_clearance_m: 12.0  # Clearance from authored/static scene objects.
+    gen_track_separation_m: 20.0        # Minimum separation between generated spawns.
+    gen_bias_to_ego_view: true          # Keep a portion of traffic near the ego camera view.
+    gen_ego_view_fraction: 0.7          # Share of tracks spawned near the ego forward cone.
+    gen_ego_view_min_range_m: 35.0      # Min distance from ego for near-view spawns.
+    gen_ego_view_max_range_m: 120.0     # Max distance from ego for near-view spawns.
+    gen_ego_view_fov_deg: 120.0         # Forward cone width for near-view spawns.
     gen_random_seed: 0                  # 0 = non-reproducible.
 
 # boat_traj_generator

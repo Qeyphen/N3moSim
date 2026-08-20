@@ -43,7 +43,8 @@ AREA_PRESETS: dict[str, list[tuple[str, float]]] = {
         ("sailboat", 5.0),
         ("motorboat", 3.0),
         ("jetski", 2.0),
-        ("fishing_boat", 2.0),
+        ("fishing_boat", 3.0),
+        ("ferry", 1.0),
         ("windsurf", 1.0),
     ],
     "harbor": [
@@ -98,6 +99,24 @@ class Scenario:
     name: str
     duration_s: float
     tracks: list[TrackDef] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class ExclusionZone:
+    x: float
+    y: float
+    radius_m: float
+
+
+@dataclass(frozen=True)
+class EgoSpawnBias:
+    x: float
+    y: float
+    heading_rad: float
+    near_fraction: float
+    min_range_m: float
+    max_range_m: float
+    fov_deg: float
 
 
 def load_scenario(path: str | Path) -> Scenario:
@@ -262,18 +281,50 @@ class NavigableArea:
         count = sum(sum(row) for row in self.mask)
         return count * self.resolution * self.resolution
 
-    def sample_point(self, rng: random.Random) -> tuple[float, float]:
-        """Sample a random navigable point."""
+    def sample_point(
+        self,
+        rng: random.Random,
+        exclusions: list[ExclusionZone] | None = None,
+    ) -> tuple[float, float]:
+        """Sample a random navigable point outside optional exclusion zones."""
+        exclusions = exclusions or []
         for _ in range(1000):
             x = self.origin_x + rng.uniform(0, self.width * self.resolution)
             y = self.origin_y + rng.uniform(0, self.height * self.resolution)
-            if self.is_navigable(x, y):
+            if self.is_navigable(x, y) and point_clear_of_exclusions(x, y, exclusions):
                 return x, y
         # Fallback: center of the map
         return (
             self.origin_x + self.width * self.resolution / 2,
             self.origin_y + self.height * self.resolution / 2,
         )
+
+    def sample_point_near_pose(
+        self,
+        rng: random.Random,
+        *,
+        pose_x: float,
+        pose_y: float,
+        heading_rad: float,
+        min_range_m: float,
+        max_range_m: float,
+        fov_deg: float,
+        exclusions: list[ExclusionZone] | None = None,
+    ) -> tuple[float, float] | None:
+        """Sample a navigable point in a cone ahead of a reference pose."""
+        exclusions = exclusions or []
+        min_range_m = max(0.0, min_range_m)
+        max_range_m = max(min_range_m + self.resolution, max_range_m)
+        half_fov_rad = max(1.0, min(179.0, fov_deg)) * DEG2RAD * 0.5
+
+        for _ in range(300):
+            dist = rng.uniform(min_range_m, max_range_m)
+            yaw = heading_rad + rng.uniform(-half_fov_rad, half_fov_rad)
+            x = pose_x + dist * math.cos(yaw)
+            y = pose_y + dist * math.sin(yaw)
+            if self.is_navigable(x, y) and point_clear_of_exclusions(x, y, exclusions):
+                return x, y
+        return None
 
 
 def extract_navigable_area(
@@ -338,12 +389,18 @@ def generate_scenario(
     max_waypoints: int,
     spawn_spread_s: float,
     seed: int,
+    scene_exclusions: list[ExclusionZone] | None = None,
+    track_separation_m: float = 20.0,
+    type_counts: dict[str, int] | None = None,
+    ego_spawn_bias: EgoSpawnBias | None = None,
 ) -> Scenario:
     """Generate a random scenario within the navigable area."""
     rng = random.Random(seed) if seed > 0 else random.Random()
+    scene_exclusions = list(scene_exclusions or [])
 
     if type_names:
-        # Weights are optional now (even assignment ignores them); default to equal.
+        # Weights are optional now (even assignment ignores them unless explicit per-type counts
+        # are absent). Default to equal for compatibility with older callers.
         weights = type_weights if len(type_weights) == len(type_names) else [1.0] * len(type_names)
         type_dist = list(zip(type_names, weights))
     else:
@@ -355,14 +412,48 @@ def generate_scenario(
         area_km2 = nav_area.area_m2() / 1e6
         track_count = max(1, min(200, int(density * area_km2)))
 
-    # Even assignment: cycle a shuffled type list so every type appears equally, rather than
-    # weighted-random which lets some vessels dominate. Shuffled per scenario (different seed each
-    # regen) so which types fill a short scenario also rotates across regenerations.
-    shuffled = dist_names[:]
-    rng.shuffle(shuffled)
-    type_seq = [shuffled[i % len(shuffled)] for i in range(track_count)]
+    explicit_counts = {
+        name: int(count)
+        for name, count in (type_counts or {}).items()
+        if name in TRACK_TYPE_TABLE and int(count) > 0
+    }
+
+    type_seq: list[str]
+    if explicit_counts:
+        type_seq = []
+        for name, count in explicit_counts.items():
+            type_seq.extend([name] * count)
+
+        if len(type_seq) < track_count:
+            fallback_names = list(explicit_counts.keys()) or dist_names[:]
+            if not fallback_names:
+                fallback_names = ["unknown"]
+            shuffled = fallback_names[:]
+            rng.shuffle(shuffled)
+            type_seq.extend(
+                shuffled[i % len(shuffled)]
+                for i in range(track_count - len(type_seq))
+            )
+        elif len(type_seq) > track_count:
+            rng.shuffle(type_seq)
+            type_seq = type_seq[:track_count]
+
+        rng.shuffle(type_seq)
+    else:
+        # Even assignment: cycle a shuffled type list so every type appears equally, rather than
+        # weighted-random which lets some vessels dominate. Shuffled per scenario so which types
+        # fill a short scenario also rotates across regenerations.
+        shuffled = dist_names[:]
+        rng.shuffle(shuffled)
+        type_seq = [shuffled[i % len(shuffled)] for i in range(track_count)]
 
     tracks: list[TrackDef] = []
+    spawned_exclusions: list[ExclusionZone] = list(scene_exclusions)
+    near_track_count = 0
+    if ego_spawn_bias is not None:
+        near_track_count = int(round(track_count * max(0.0, min(1.0, ego_spawn_bias.near_fraction))))
+        near_track_count = max(0, min(track_count, near_track_count))
+
     for i in range(track_count):
         type_name = type_seq[i]
         type_info = TRACK_TYPE_TABLE.get(type_name, TRACK_TYPE_TABLE["unknown"])
@@ -377,8 +468,25 @@ def generate_scenario(
         n_wps = rng.randint(min_waypoints, max_waypoints)
         wps: list[TrackWaypoint] = []
 
-        x, y = nav_area.sample_point(rng)
+        start_xy: tuple[float, float] | None = None
+        if ego_spawn_bias is not None and i < near_track_count:
+            start_xy = nav_area.sample_point_near_pose(
+                rng,
+                pose_x=ego_spawn_bias.x,
+                pose_y=ego_spawn_bias.y,
+                heading_rad=ego_spawn_bias.heading_rad,
+                min_range_m=ego_spawn_bias.min_range_m,
+                max_range_m=ego_spawn_bias.max_range_m,
+                fov_deg=ego_spawn_bias.fov_deg,
+                exclusions=spawned_exclusions,
+            )
+        if start_xy is None:
+            start_xy = nav_area.sample_point(rng, exclusions=spawned_exclusions)
+        x, y = start_xy
         wps.append(TrackWaypoint(x=x, y=y, speed_kts=speed_kts))
+        spawned_exclusions.append(
+            ExclusionZone(x=x, y=y, radius_m=max(track_separation_m, nav_area.resolution * 2))
+        )
 
         heading_rad = rng.uniform(0, 2 * math.pi)
         sigma_rad = heading_sigma * DEG2RAD
@@ -393,13 +501,13 @@ def generate_scenario(
 
             # reflect off non-navigable boundary, up to 5 tries, else resample
             for attempt in range(5):
-                if nav_area.is_navigable(nx, ny):
+                if nav_area.is_navigable(nx, ny) and point_clear_of_exclusions(nx, ny, scene_exclusions):
                     break
                 heading_rad += math.pi * (0.5 + rng.random() * 0.5)
                 nx = x + dist * math.cos(heading_rad)
                 ny = y + dist * math.sin(heading_rad)
             else:
-                nx, ny = nav_area.sample_point(rng)
+                nx, ny = nav_area.sample_point(rng, exclusions=scene_exclusions)
 
             x, y = nx, ny
             wps.append(TrackWaypoint(x=x, y=y, speed_kts=speed_kts))
@@ -422,6 +530,17 @@ def generate_scenario(
         )
 
     return Scenario(name=f"generated_{area_type}", duration_s=duration_s, tracks=tracks)
+
+
+def point_clear_of_exclusions(
+    x: float,
+    y: float,
+    exclusions: list[ExclusionZone],
+) -> bool:
+    for zone in exclusions:
+        if math.hypot(x - zone.x, y - zone.y) < zone.radius_m:
+            return False
+    return True
 
 
 def scenario_to_yaml(scenario: Scenario) -> dict[str, Any]:
