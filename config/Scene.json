@@ -6,11 +6,11 @@
   },
   "objects": [
     {
-      "id": "agent_01",
+      "id": "ego_boat",
       "type": "Boat",
       "dynamic": true,
-      "ros2_topic": "/agent_01/cmd_vel",
-      "control_mode": "manual",
+      "ros2_topic": "/ego_boat/cmd_vel",
+      "control_mode": "auto",
       "position": [0, 1, -300],
       "rotation": [0, 0, 0]
     },

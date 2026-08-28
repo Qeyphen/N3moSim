@@ -52,7 +52,7 @@ Everything crossing the Unity↔ROS boundary is a ROS topic tunnelled through th
 
 | Topic | Type | Direction | Rate / QoS | Produced by | Consumed by |
 |---|---|---|---|---|---|
-| `/agent_01/target_pose` | `geometry_msgs/PoseStamped` | ROS → Unity | republished, RELIABLE+TRANSIENT_LOCAL | `target_pose_publisher` | `AutonomousBoatController` |
+| `/ego_boat/target_pose` | `geometry_msgs/PoseStamped` | ROS → Unity | republished, RELIABLE+TRANSIENT_LOCAL | `target_pose_publisher` | `AutonomousBoatController` |
 | `/sim/boat/pose` | `geometry_msgs/PoseStamped` | Unity → ROS | 10 Hz | `EgoPosePublisher` | RViz, scenario tooling |
 | `/map` | `nav_msgs/OccupancyGrid` | Unity → ROS | once, **latched** | `OccupancyGridPublisher` | scenario generator (as costmap), RViz |
 | `/sim/tracks` | `n3_new_msgs/TrackArray` | ROS → Unity | 10 Hz, RELIABLE | `scenario_generator` | `TrackSpawner` |
@@ -70,7 +70,7 @@ See **`doc/environment.md`** for the full procedural-environment (weather + time
 **The closed loop:** Unity rasterises its static obstacles into `/map` → the scenario
 generator reads `/map` as a costmap, generates traffic that avoids land, and publishes
 `/sim/tracks` → Unity's `TrackSpawner` renders that traffic → meanwhile you send
-`/agent_01/target_pose` and the ego boat drives there, perceiving the traffic.
+`/ego_boat/target_pose` and the ego boat drives there, perceiving the traffic.
 
 ---
 
@@ -233,7 +233,7 @@ Four packages. Three are **volume-mounted** into the container (live-editable); 
 is compiled in, so message changes need a rebuild.
 
 ### 6.1 `n3mo_control` — the control entry point
-- **`target_pose_publisher.py`** — publishes `/agent_01/target_pose` (Unity convention `x`,
+- **`target_pose_publisher.py`** — publishes `/ego_boat/target_pose` (Unity convention `x`,
   `z`; `y=0`) then exits. **Republishes** until a subscriber has been present for `hold_time`
   (or warns after `wait_timeout`), because Unity only subscribes while the boat is in **Auto**
   mode and the relayed subscription can appear a moment late. QoS is RELIABLE +
@@ -380,7 +380,7 @@ transform. See **`doc/camera-urdf.md`** for the design and verified extrinsics.
 ## 10. Config files
 
 - **`config/Scene.json`** — the scene definition (mounted into the container): an
-  `environment` block (wind, wave height, time of day) and `objects` (e.g. `agent_01` Boat at
+  `environment` block (wind, wave height, time of day) and `objects` (e.g. `ego_boat` Boat at
   `[0,1,-300]`, `control_mode: manual`, plus static buoys). Read by `SceneBuilder`.
 - **`config/n3mo.rviz`** — RViz layout: Fixed Frame `map`; displays Grid, **Map** (`/map`,
   Transient Local), **Tracks** (`/sim/tracks/markers`), **Ego** (`/sim/boat/pose`, green

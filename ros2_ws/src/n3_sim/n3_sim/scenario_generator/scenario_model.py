@@ -374,6 +374,39 @@ def extract_navigable_area(
     )
 
 
+def sample_spawn_times(
+    rng: random.Random,
+    *,
+    track_count: int,
+    duration_s: float,
+    spawn_spread_s: float,
+    near_track_count: int,
+) -> list[float]:
+    """Spread track activations across the scenario instead of front-loading them."""
+    if track_count <= 0:
+        return []
+
+    global_cap = max(0.0, min(spawn_spread_s, duration_s))
+    if global_cap <= 0.0:
+        return [0.0] * track_count
+
+    spawn_times: list[float] = []
+    for i in range(track_count):
+        if i < near_track_count:
+            cap = min(global_cap, max(2.0, duration_s * 0.55))
+        else:
+            cap = global_cap
+
+        slot_lo = cap * (i / track_count)
+        slot_hi = cap * ((i + 1) / track_count)
+        if i == track_count - 1:
+            slot_hi = cap
+        spawn_times.append(rng.uniform(slot_lo, max(slot_lo, slot_hi)))
+
+    rng.shuffle(spawn_times)
+    return spawn_times
+
+
 def generate_scenario(
     nav_area: NavigableArea,
     *,
@@ -453,8 +486,16 @@ def generate_scenario(
     if ego_spawn_bias is not None:
         near_track_count = int(round(track_count * max(0.0, min(1.0, ego_spawn_bias.near_fraction))))
         near_track_count = max(0, min(track_count, near_track_count))
+    spawn_times = sample_spawn_times(
+        rng,
+        track_count=track_count,
+        duration_s=duration_s,
+        spawn_spread_s=spawn_spread_s,
+        near_track_count=near_track_count,
+    )
 
     for i in range(track_count):
+        view_biased_track = ego_spawn_bias is not None and i < near_track_count
         type_name = type_seq[i]
         type_info = TRACK_TYPE_TABLE.get(type_name, TRACK_TYPE_TABLE["unknown"])
         type_value, default_min_spd, default_max_spd, heading_sigma = type_info
@@ -469,7 +510,7 @@ def generate_scenario(
         wps: list[TrackWaypoint] = []
 
         start_xy: tuple[float, float] | None = None
-        if ego_spawn_bias is not None and i < near_track_count:
+        if view_biased_track:
             start_xy = nav_area.sample_point_near_pose(
                 rng,
                 pose_x=ego_spawn_bias.x,
@@ -490,8 +531,39 @@ def generate_scenario(
 
         heading_rad = rng.uniform(0, 2 * math.pi)
         sigma_rad = heading_sigma * DEG2RAD
+        spawn_t = spawn_times[i]
+        remaining_lifespan_s = max(nav_area.resolution * 2, duration_s - spawn_t)
+        min_track_lifespan_s = min(duration_s, max(12.0, remaining_lifespan_s * 0.7))
 
         for _ in range(n_wps - 1):
+            if view_biased_track:
+                next_xy: tuple[float, float] | None = None
+                cone_min_range = max(nav_area.resolution * 4, ego_spawn_bias.min_range_m * 0.6)
+                cone_max_range = max(cone_min_range + nav_area.resolution * 4, ego_spawn_bias.max_range_m)
+                cone_fov_deg = min(175.0, ego_spawn_bias.fov_deg + 20.0)
+                for _attempt in range(150):
+                    candidate = nav_area.sample_point_near_pose(
+                        rng,
+                        pose_x=ego_spawn_bias.x,
+                        pose_y=ego_spawn_bias.y,
+                        heading_rad=ego_spawn_bias.heading_rad,
+                        min_range_m=cone_min_range,
+                        max_range_m=cone_max_range,
+                        fov_deg=cone_fov_deg,
+                        exclusions=scene_exclusions,
+                    )
+                    if candidate is None:
+                        break
+                    if math.hypot(candidate[0] - x, candidate[1] - y) < nav_area.resolution * 4:
+                        continue
+                    next_xy = candidate
+                    heading_rad = math.atan2(next_xy[1] - y, next_xy[0] - x)
+                    break
+                if next_xy is not None:
+                    x, y = next_xy
+                    wps.append(TrackWaypoint(x=x, y=y, speed_kts=speed_kts))
+                    continue
+
             heading_rad += rng.gauss(0, sigma_rad)
             seg_time = rng.uniform(20.0, duration_s / max(n_wps, 1))
             dist = speed_kts * KTS_TO_MS * seg_time
@@ -512,9 +584,29 @@ def generate_scenario(
             x, y = nx, ny
             wps.append(TrackWaypoint(x=x, y=y, speed_kts=speed_kts))
 
-        spawn_t = rng.uniform(0, spawn_spread_s)
         cum_dists = _segment_distances(wps)
         cum_times = _segment_times(wps, cum_dists)
+        while cum_times[-1] < min_track_lifespan_s:
+            heading_rad += rng.gauss(0, sigma_rad)
+            seg_time = rng.uniform(15.0, max(20.0, min_track_lifespan_s - cum_times[-1] + 10.0))
+            dist = speed_kts * KTS_TO_MS * seg_time
+
+            nx = x + dist * math.cos(heading_rad)
+            ny = y + dist * math.sin(heading_rad)
+
+            for attempt in range(5):
+                if nav_area.is_navigable(nx, ny) and point_clear_of_exclusions(nx, ny, scene_exclusions):
+                    break
+                heading_rad += math.pi * (0.5 + rng.random() * 0.5)
+                nx = x + dist * math.cos(heading_rad)
+                ny = y + dist * math.sin(heading_rad)
+            else:
+                nx, ny = nav_area.sample_point(rng, exclusions=scene_exclusions)
+
+            x, y = nx, ny
+            wps.append(TrackWaypoint(x=x, y=y, speed_kts=speed_kts))
+            cum_dists = _segment_distances(wps)
+            cum_times = _segment_times(wps, cum_dists)
         despawn_t = min(spawn_t + cum_times[-1], duration_s)
 
         tracks.append(

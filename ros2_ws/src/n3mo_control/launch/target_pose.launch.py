@@ -6,7 +6,7 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     args = [
-        DeclareLaunchArgument('topic', default_value='/agent_01/target_pose'),
+        DeclareLaunchArgument('topic', default_value='/ego_boat/target_pose'),
         DeclareLaunchArgument('frame_id', default_value='map'),
         DeclareLaunchArgument('x', default_value='0.0'),
         DeclareLaunchArgument('z', default_value='0.0'),

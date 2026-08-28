@@ -46,6 +46,12 @@ services:
       - ros_bridge
     networks:
       - ros_net
+    volumes:
+      - ./ros2_ws/src/n3mo_control:/root/ros2_ws/src/n3mo_control
+      - ./ros2_ws/src/n3_common:/root/ros2_ws/src/n3_common
+      - ./ros2_ws/src/n3_sim:/root/ros2_ws/src/n3_sim
+      - ./config:/n3mosim/config
+      - ./recordings:/recordings
     environment:
       - ROS_DOMAIN_ID=0
       - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp

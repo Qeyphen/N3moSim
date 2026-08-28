@@ -337,6 +337,12 @@ class ScenarioGeneratorNode(Node):
             return self._cmd_list_tracks(response)
         if cmd == "clear_tracks":
             return self._cmd_clear_tracks(response)
+        if cmd == "load_scenario":
+            return self._cmd_load_scenario(req, response)
+        if cmd == "reset_scenario_clock":
+            return self._cmd_reset_scenario_clock(response)
+        if cmd == "scenario_status":
+            return self._cmd_scenario_status(response)
 
         response.success = False
         response.json_response = json.dumps({"error": f"Unknown command: {cmd}"})
@@ -426,6 +432,65 @@ class ScenarioGeneratorNode(Node):
         self.log.info(f"Cleared {count} injected tracks")
         response.success = True
         response.json_response = json.dumps({"cleared": count})
+        return response
+
+    def _cmd_load_scenario(
+        self,
+        req: dict,
+        response: ros.ScenarioCommand.Response,
+    ) -> ros.ScenarioCommand.Response:
+        path = str(req.get("path", "")).strip()
+        if not path:
+            response.success = False
+            response.json_response = json.dumps({"error": "Missing scenario path"})
+            return response
+
+        ok = self._load_scenario(path)
+        response.success = ok
+        if ok and self.scenario is not None:
+            response.json_response = json.dumps(
+                {
+                    "loaded": True,
+                    "path": path,
+                    "name": self.scenario.name,
+                    "track_count": len(self.scenario.tracks),
+                    "duration_s": self.scenario.duration_s,
+                }
+            )
+        else:
+            response.json_response = json.dumps({"error": f"Failed to load scenario: {path}"})
+        return response
+
+    def _cmd_reset_scenario_clock(
+        self,
+        response: ros.ScenarioCommand.Response,
+    ) -> ros.ScenarioCommand.Response:
+        self.start_time = self.get_clock().now()
+        response.success = True
+        response.json_response = json.dumps(
+            {
+                "reset": True,
+                "scenario_loaded": self.scenario is not None,
+                "injected_track_count": len(self.injected_tracks),
+            }
+        )
+        self.log.info("Scenario playback clock reset")
+        return response
+
+    def _cmd_scenario_status(
+        self,
+        response: ros.ScenarioCommand.Response,
+    ) -> ros.ScenarioCommand.Response:
+        response.success = True
+        response.json_response = json.dumps(
+            {
+                "scenario_loaded": self.scenario is not None,
+                "scenario_name": self.scenario.name if self.scenario is not None else "",
+                "track_count": len(self.scenario.tracks) if self.scenario is not None else 0,
+                "duration_s": self.scenario.duration_s if self.scenario is not None else 0.0,
+                "injected_track_count": len(self.injected_tracks),
+            }
+        )
         return response
 
 

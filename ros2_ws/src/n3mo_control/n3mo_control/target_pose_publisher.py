@@ -19,7 +19,7 @@ class TargetPosePublisher(Node):
     def __init__(self):
         super().__init__('target_pose_publisher')
 
-        self.declare_parameter('topic', '/agent_01/target_pose')
+        self.declare_parameter('topic', '/ego_boat/target_pose')
         self.declare_parameter('frame_id', 'map')
         self.declare_parameter('x', 0.0)               # Unity right
         self.declare_parameter('z', 0.0)               # Unity forward

@@ -102,7 +102,7 @@ class DatasetSweep(Node):
         latched = QoSProfile(depth=1, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
                              reliability=QoSReliabilityPolicy.RELIABLE)
         self.pub_ctrl = self.create_publisher(Bool, "/dataset/control", latched)
-        self.pub_wp = self.create_publisher(PoseStamped, "/agent_01/target_pose", latched)
+        self.pub_wp = self.create_publisher(PoseStamped, "/ego_boat/target_pose", latched)
         self.pub_rand = self.create_publisher(Int32, "/env/randomize", latched)
         self.regen = self.create_client(Trigger, "/sim/generate_scenario")
         self.create_subscription(Int32, "/dataset/frames", self.on_frames, 10)
