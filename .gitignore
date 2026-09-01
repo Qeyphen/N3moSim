@@ -113,3 +113,6 @@ ProjectSettings/DynamicsManager.asset
 recordings/**/*.csv
 recordings/**/*.db3
 recordings/**/metadata.yaml
+
+# IDE-generated solution files
+*.slnx
