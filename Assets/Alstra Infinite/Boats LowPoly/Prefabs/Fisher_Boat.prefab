@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 2208126154792767529}
   - component: {fileID: 4125332718084744419}
   - component: {fileID: 6180361004083467062}
+  - component: {fileID: 8791425364758691234}
   m_Layer: 0
   m_Name: Fisher_Boat
   m_TagString: Untagged
@@ -94,3 +95,20 @@ MeshCollider:
   m_Convex: 0
   m_CookingOptions: 30
   m_Mesh: {fileID: 2301742320778191154, guid: 67ba160de4f0b924dbdf3247202d3670, type: 3}
+--- !u!114 &8791425364758691234
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2468214695573800246}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8b33f0bc2b78db642a758f07826d0dd0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Perception.Runtime::UnityEngine.Perception.GroundTruth.LabelManagement.Labeling
+  labels:
+  - fishing_boat
+  - dynamic_obstacle
+  useAutoLabeling: 0
+  autoLabelingSchemeType: 

@@ -47,7 +47,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Unity.Perception.Runtime::UnityEngine.Perception.GroundTruth.LabelManagement.Labeling
   labels:
-  - paddleboard
+  - paddle_board
   - dynamic_obstacle
   useAutoLabeling: 0
   autoLabelingSchemeType: 
