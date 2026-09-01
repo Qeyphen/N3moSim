@@ -360,11 +360,11 @@ rate that can be changed live over `/dataset/capture_hz`. Output is a **SOLO** d
 depth or segmentation passes** — so water has no depth/class from the engine. `marine_surface.py`
 fills that geometrically (the Phase-3 horizon-synthesis approach).
 
-**Recommended recording mode:** many short scenarios, not one long sweep. The host-side tools
-`tools/generate_scenarios.py` and `tools/run_scenario_batch.py` generate a manifest of short
-scenario specs, then execute them by fixing weather/time, setting the generator seed, updating
-`/dataset/capture_hz`, and invoking `dataset_sweep` in duration-based mode with no mid-run
-environment changes.
+**Recommended recording mode:** many short scenarios, not one long sweep. The host-side
+orchestrator `tools/run_dataset_plan.py` reads a YAML plan of short scenario specs, then
+executes each one through `tools/run_scenario.py`: fixed weather/time, explicit generator
+seed, `/dataset/capture_hz` update, and `dataset_sweep` in duration-based mode with no
+mid-run environment changes.
 
 **Camera FOV:** the POV camera is configured to **60° vertical / ~92° horizontal** at 1280×720,
 which fixes the intrinsics (fx=fy≈623.5 px, principal point centred) baked into every frame. See
@@ -451,8 +451,8 @@ ros2_ws/src/
   n3_new_msgs/    Track.msg, TrackArray.msg (compiled into the image)
 
 tools/            solo_preview, depth_preview, camera_info, range_bearing,
-                  semantic_preview, marine_surface, generate_scenarios,
-                  run_scenario_batch
+                  semantic_preview, marine_surface, run_scenario,
+                  run_dataset_plan, plan_loader
 config/           Scene.json, n3mo.rviz
 Dockerfile, docker-compose.yml
 doc/              phase-1.md, phase-2.md, todo.md, architecture.md (this file)

@@ -6,10 +6,8 @@ Use one of these:
 
 - `tools/run_scenario.py`
   - one explicit scene run
-- `tools/run_scenario_batch.py`
-  - one deterministic scene reused across repeated runs until a target frame count is reached
-
-`tools/generate_scenarios.py` remains available for legacy manifest-based operation, but it is no longer the main recommended workflow.
+- `tools/run_dataset_plan.py`
+  - a full dataset: one `run_scenario.py` run per scenario listed in a YAML plan
 
 ## `tools/run_scenario.py`
 
@@ -144,163 +142,74 @@ The run output directory will contain:
   - `scenario_end_<camera>_<timestamp>.json`
   - `unity_defaults_<timestamp>.json`
 
-## `tools/run_scenario_batch.py`
+## `tools/run_dataset_plan.py`
 
 ## Purpose
 
-Runs one deterministic scene template across multiple captures until a total frame target is reached.
-
-This is the current orchestrator.
+Runs a full dataset plan: one `run_scenario.py` run per scenario declared in a single YAML plan file.
 
 It:
 
-1. generates one scene template from the supplied scene-generation arguments
-2. reuses the same generated scene layout across runs
-3. samples different allowed environments per run
-4. archives each run under a UUID folder below `--output-root`
-5. stops when accumulated frames reach `--total-frames`
+1. loads and validates the plan (`tools/plan_loader.py`, stdlib-only YAML subset)
+2. resolves each scenario as explicit `run_scenario.py` arguments (plan `defaults` plus per-scenario overrides)
+3. runs the scenarios sequentially, each into its own numbered folder under `--output-root`
+4. aggregates every `run_summary.json` into a global `manifest.json`
+5. records failures in the manifest and keeps going with the next scenario
 
 Use this when you want:
 
-- many runs of the same base scene
-- changing weather/time conditions across runs
-- one parent output directory with multiple run subfolders
+- a complete dataset with controlled variety: lighting, weather, times of day, area types, seeds
+- every run deterministic and reproducible (`scene_seed` is mandatory per scenario)
+- one traceable manifest for downstream QC
 
 ## Command
 
 ```bash
-python3 tools/run_scenario_batch.py \
-  --output-root /absolute/path/to/batch_root \
-  --total-frames 300 \
-  --duration 20 \
-  --capture-hz 8 \
-  --track-count 18 \
-  --area-type coastal \
-  --occupied-fraction 0.8 \
-  --time-mode fixed
+python3 tools/run_dataset_plan.py tools/plans/dataset-1k.yaml \
+  --output-root recordings/dataset-1k
+
+# preview the exact run_scenario.py commands without running anything
+python3 tools/run_dataset_plan.py tools/plans/dataset-1k.yaml \
+  --output-root recordings/dataset-1k --dry-run
 ```
 
-## Core Arguments
+Unity must be in Play mode, exactly as for a single `run_scenario.py` run.
 
-- `--output-root`
-  - parent directory for UUID run folders
-- `--total-frames`
-  - stop once accumulated archived frames reach this target
-- `--scene-seed`
-  - deterministic scene layout seed
-- `--env-seed`
-  - deterministic environment sampling seed
-- `--duration`
-  - per-run duration
-- `--capture-hz`
-  - per-run capture rate
-- `--track-count`
-  - generated tracks in the reused scene
-- `--area-type`
-  - traffic preset
-- `--type-counts-json`
-  - exact object mix override
-- `--occupied-fraction`
-  - ego-view bias fraction
+## Plan File
 
-## Time arguments
+```yaml
+name: dataset-1k
+defaults:            # shared run_scenario.py arguments
+  duration: 25
+  capture_hz: 5
+  track_count: 18
+scenarios:
+  - name: lake-clear-day
+    area_type: lake
+    weather: clear
+    time_of_day: 11.0
+    scene_seed: 101
+  - name: harbor-stormy-dusk
+    area_type: harbor
+    weather: stormy
+    time_of_day: 18.0
+    wave: 0.9
+    scene_seed: 302
+```
 
-- `--time-mode fixed`
-  - one time-of-day per run
-- `--time-mode linear`
-  - time-of-day drifts forward smoothly during a run
-- `--time-drift-hours`
-  - maximum forward drift when `linear`
-- `--time-update-period`
-  - seconds between applied time updates when `linear`
+Scenario keys are the `run_scenario.py` arguments with underscores (`capture_hz` for `--capture-hz`, a `type_counts` mapping for `--type-counts-json`). `duration`, `time_of_day`, `weather` and `scene_seed` are required, directly or through `defaults` (`scene_seed` is per-scenario only and must be unique). Unknown keys are rejected. The full schema is documented in `tools/plan_loader.py`.
 
-## Weather/time distribution arguments
+The reference plan `tools/plans/dataset-1k.yaml` produces ~1000 frames at 5 Hz across the four area types, all weather presets, and day/dusk lighting.
 
-- `--weathers`
-  - comma-separated preset list to sample from
-- `--day-frac`
-- `--twilight-frac`
-- `--night-frac`
-
-Important current policy:
-
-- visible-hour use is intentionally favored
-- previous work restricted most runs away from pitch-black conditions
-
-## Batch Output Structure
+## Plan Output Structure
 
 Inside `--output-root`:
 
-- `scene_spec.json`
-  - describes the fixed scene template for the batch
-- `batch_summary.json`
-  - global summary across all runs
-- `unity_defaults_<timestamp>.json`
-  - hoisted once to batch root
-- `<uuid>/`
-  - one directory per archived run
-  - contains raw SOLO data and Unity metadata for that run
-  - contains `orchestrator_run.json`
-
-## Legacy Manifest Mode
-
-`run_scenario_batch.py` also still supports the older manifest flow.
-
-If the first positional argument is a real JSON file, it is treated as a scenario manifest:
-
-```bash
-python3 tools/run_scenario_batch.py scenarios_full_test.json --limit 1
-```
-
-In that mode:
-
-- the file already contains multiple scenario definitions
-- the runner iterates through them
-- environment and timing come from the manifest rather than the new orchestrator logic
-
-## `tools/generate_scenarios.py`
-
-## Purpose
-
-Generates a JSON manifest of many scenarios for the legacy manifest flow.
-
-Example:
-
-```bash
-python3 tools/generate_scenarios.py \
-  --count 3 \
-  --duration 20 \
-  --capture-hz 8 \
-  --out scenarios_test.json
-```
-
-This writes a manifest file. It does not run Unity, ROS, or capture by itself.
-
-You would then pass that manifest to:
-
-```bash
-python3 tools/run_scenario_batch.py scenarios_test.json
-```
-
-## `--time-mode fixed` vs `--time-mode linear`
-
-### `fixed`
-
-- time of day does not change within the run
-
-### `linear`
-
-- time of day starts at one hour
-- ends at a later hour
-- the runner publishes updates periodically during the run
-- this creates slow, coherent progression rather than abrupt jumps
-
-Example:
-
-- `12.8 -> 13.1 (linear)`
-  - the run starts around 12:48
-  - it ends around 13:06
-  - the change is gradual
+- `manifest.json`
+  - plan name, per-scenario status, frames, commands, and totals
+  - rewritten after every scenario, so an interrupted run leaves a usable partial manifest
+- `001-<scenario-name>/`, `002-<scenario-name>/`, ...
+  - one folder per scenario, containing the standard single-run output (`scene_spec.json`, `run_summary.json`, SOLO data, Unity metadata)
 
 ## `tools/run_defense_scene.sh`
 

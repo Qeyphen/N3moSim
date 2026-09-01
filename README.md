@@ -5,7 +5,7 @@ Unity marine simulator with a ROS 2 bridge, procedural traffic generation, dual-
 This repository now supports two main dataset-generation workflows:
 
 - `tools/run_scenario.py`: run one explicit scene once, with the exact weather and time-of-day you pass.
-- `tools/run_scenario_batch.py`: generate one deterministic scene template, then replay it across multiple runs until a target total frame count is reached.
+- `tools/run_dataset_plan.py`: run a full dataset plan, one `run_scenario.py` run per scenario declared in a YAML plan file.
 
 The current pipeline is built around:
 
@@ -17,7 +17,7 @@ The current pipeline is built around:
 ## Documentation Map
 
 - [docs/architecture.md](docs/architecture.md): project structure, major scripts, ROS topics, Unity components, and the occupancy-grid/costmap loop
-- [docs/scenario_workflows.md](docs/scenario_workflows.md): `run_scenario.py`, `run_scenario_batch.py`, legacy manifest flow, and the defense-scene helper
+- [docs/scenario_workflows.md](docs/scenario_workflows.md): `run_scenario.py`, `run_dataset_plan.py` plan files, and the defense-scene helper
 - [docs/dataset_pipeline.md](docs/dataset_pipeline.md): Perception setup, dual-camera capture, metadata files, preview tools, masks, and SOLO-to-YOLO export
 - [docs/ros_interfaces.md](docs/ros_interfaces.md): operational ROS topics, services, message types, and the key parameters for `dataset_sweep`, `env_control`, and `scenario_generator`
 
@@ -101,14 +101,14 @@ Use it when you need:
 - one output folder
 - no repeated random environment sampling
 
-For dataset accumulation across many runs of the same deterministic scene layout, use `tools/run_scenario_batch.py`.
+For a complete dataset with controlled variety, use `tools/run_dataset_plan.py`.
 
 Use it when you need:
 
-- one deterministic scene template reused across runs
-- different sampled weather and time-of-day conditions across runs
-- UUID subfolders per run
-- automatic stop when a total frame target is reached
+- many scenarios varying lighting, weather, time of day, area type and traffic
+- one YAML plan file declaring every `run_scenario.py` invocation (see `tools/plans/dataset-1k.yaml`)
+- numbered subfolders per scenario and a global `manifest.json`
+- deterministic, seeded, reproducible runs
 
 ## Occupancy Grid and Costmap Summary
 
@@ -155,10 +155,9 @@ Unity writes capture metadata into the SOLO run:
 Host-side runners add orchestration metadata:
 
 - single-run mode: `scene_spec.json`, `run_summary.json`
-- batch mode: `scene_spec.json`, `batch_summary.json`, UUID run folders, `orchestrator_run.json`
+- plan mode: `manifest.json` at the output root, plus the single-run files in each numbered scenario folder
 
 ## Notes
 
-- `tools/generate_scenarios.py` still exists, but it is now the legacy manifest generator rather than the recommended primary entry point.
 - `solo_to_yolo.py` defaults to `--split none`, which means no forced train/val split is created unless you explicitly ask for one.
 - `occupied-fraction` biases a fraction of generated traffic into the ego boat forward view cone. It improves the probability of visible traffic but is not a hard guarantee that the same fraction of frames will contain objects.

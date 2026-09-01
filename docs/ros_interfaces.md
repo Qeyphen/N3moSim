@@ -28,8 +28,8 @@ It does not try to exhaustively document every experimental node in the reposito
 | `/env/rain` | `std_msgs/Float32` | `env_control`, orchestration scripts | `EnvironmentController` | set rain |
 | `/env/randomize` | `std_msgs/Int32` | `env_control`, `dataset_sweep` | `EnvironmentController` | ask Unity to randomize environment with a seed |
 | `/dataset/control` | `std_msgs/Bool` | `dataset_sweep`, CLI | `DatasetCaptureScheduler` | start/stop recording |
-| `/dataset/capture_hz` | `std_msgs/Float32` | `run_scenario.py`, `run_scenario_batch.py`, CLI | `DatasetCaptureScheduler` | change capture frequency |
-| `/dataset/scenario_info` | `std_msgs/String` | `run_scenario.py`, `run_scenario_batch.py` | `ScenarioMetadataContext` | publish current scenario metadata as JSON |
+| `/dataset/capture_hz` | `std_msgs/Float32` | `run_scenario.py`, CLI | `DatasetCaptureScheduler` | change capture frequency |
+| `/dataset/scenario_info` | `std_msgs/String` | `run_scenario.py` | `ScenarioMetadataContext` | publish current scenario metadata as JSON |
 | `/camera/resolution` | `std_msgs/String` | CLI | `CaptureResolution` | change Perception render size |
 
 ## Unity -> ROS
@@ -69,7 +69,7 @@ Response meaning:
 - `success=true`
 - `message=<path to generated YAML>`
 
-This is what `run_scenario.py`, `run_scenario_batch.py`, and `run_defense_scene.sh` use when they ask ROS to build a new deterministic scene.
+This is what `run_scenario.py` and `run_defense_scene.sh` use when they ask ROS to build a new deterministic scene.
 
 Example:
 

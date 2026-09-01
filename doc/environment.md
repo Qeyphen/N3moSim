@@ -123,9 +123,10 @@ For the current dataset workflow, weather and time of day should be treated as
 **scenario-level inputs**, not continuously changing variables inside one recording.
 
 - Within a single short scenario, the environment should stay fixed.
-- Variation happens **between** scenarios, driven by the host-side scenario manifest.
-- `tools/run_scenario_batch.py` applies one fixed `weather` and `time_of_day` per scenario,
-  then runs `dataset_sweep` with mid-run environment randomization disabled.
+- Variation happens **between** scenarios, driven by the host-side plan file.
+- `tools/run_dataset_plan.py` runs `tools/run_scenario.py` once per scenario, each with one
+  fixed `weather` and `time_of_day`, and `dataset_sweep` mid-run environment randomization
+  stays disabled.
 
 This keeps clips physically coherent and avoids the abrupt lighting/weather jumps that were
 showing up in long continuous sweeps.
