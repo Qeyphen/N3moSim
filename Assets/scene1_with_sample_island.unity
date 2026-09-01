@@ -2459,7 +2459,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e47896e23ce8c4f4b89b4081b47165fd, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::OccupancyGridPublisher
-  topic: /map
+  topic: /map/costmap_static
   frameId: map
   originX: -500
   originZ: -500

@@ -167,9 +167,11 @@ def generate_scene_once(spec: ScenarioRunSpec) -> str:
         "ros2 service call /sim/generate_scenario std_srvs/srv/Trigger '{}'",
         capture_output=True,
     )
+    if "success=True" not in output:
+        raise RuntimeError(f"Scenario generation failed:\n{output}")
     path = parse_trigger_message(output).strip()
-    if not path:
-        raise RuntimeError(f"Scenario generator returned empty path:\n{output}")
+    if not path.startswith("/"):
+        raise RuntimeError(f"Scenario generator returned no file path:\n{output}")
     return path
 
 
