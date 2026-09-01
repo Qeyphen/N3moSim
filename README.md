@@ -19,6 +19,7 @@ The current pipeline is built around:
 - [docs/architecture.md](docs/architecture.md): project structure, major scripts, ROS topics, Unity components, and the occupancy-grid/costmap loop
 - [docs/scenario_workflows.md](docs/scenario_workflows.md): `run_scenario.py`, `run_dataset_plan.py` plan files, and the defense-scene helper
 - [docs/dataset_pipeline.md](docs/dataset_pipeline.md): Perception setup, dual-camera capture, metadata files, preview tools, masks, and SOLO-to-YOLO export
+- [docs/traffic_assets.md](docs/traffic_assets.md): traffic prefab rebuild steps, spawner axis contract, and the per-type visual validation checklist
 - [docs/ros_interfaces.md](docs/ros_interfaces.md): operational ROS topics, services, message types, and the key parameters for `dataset_sweep`, `env_control`, and `scenario_generator`
 
 ## Repository Layout
