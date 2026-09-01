@@ -4,13 +4,17 @@ using Unity.Robotics.ROSTCPConnector;
 using RosMessageTypes.Nav;
 
 // Rasterises the scene's static obstacles (buoys) into a nav_msgs/OccupancyGrid, published
-// once latched on /map (so late subscribers still receive it). Uses renderer bounds, no colliders.
+// latched on /map and republished periodically, so subscribers still receive it even when the
+// ROS containers start after Play mode (the endpoint latch only caches what it has received).
+// Uses renderer bounds, no colliders.
 // Convention: Unity x -> grid column, Unity z -> grid row; data row-major (index = row*width + col).
 public class OccupancyGridPublisher : MonoBehaviour
 {
     [Header("ROS")]
     public string topic   = "/map";
     public string frameId = "map";
+    [Tooltip("Seconds between republications of the last built grid (0 = publish once only).")]
+    public float republishPeriod = 5f;
 
     [Header("Grid (match occupancy_grid_server params)")]
     public float originX      = -500f;   // Unity x of cell (0,0) corner -> origin_x
@@ -30,6 +34,7 @@ public class OccupancyGridPublisher : MonoBehaviour
 
     private ROSConnection      ros;
     private List<GameObject>   obstacles = new List<GameObject>();
+    private OccupancyGridMsg   lastMsg;
 
     // Rasterise + publish the given static obstacles. Called by SceneBuilder.
     public void Publish(List<GameObject> staticObstacles)
@@ -81,9 +86,20 @@ public class OccupancyGridPublisher : MonoBehaviour
         if (inflationRadius > 0f)
             data = Inflate(data, cols, rows, Mathf.RoundToInt(inflationRadius / resolution));
 
-        ros.Publish(topic, BuildMessage(cols, rows, data));
+        lastMsg = BuildMessage(cols, rows, data);
+        ros.Publish(topic, lastMsg);
         Debug.Log($"[OccupancyGridPublisher] Published {cols}x{rows} grid on '{topic}' " +
                   $"(res={resolution}m, {all.Count} obstacles, {occupied} occupied cells).");
+
+        CancelInvoke(nameof(RepublishLast));
+        if (republishPeriod > 0f)
+            InvokeRepeating(nameof(RepublishLast), republishPeriod, republishPeriod);
+    }
+
+    void RepublishLast()
+    {
+        if (lastMsg != null && ros != null)
+            ros.Publish(topic, lastMsg);
     }
 
     // Combined world-space AABB of all renderers under the object (null if none).
