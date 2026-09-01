@@ -4,14 +4,14 @@ using Unity.Robotics.ROSTCPConnector;
 using RosMessageTypes.Nav;
 
 // Rasterises the scene's static obstacles (buoys) into a nav_msgs/OccupancyGrid, published
-// latched on /map and republished periodically, so subscribers still receive it even when the
+// latched on /map/costmap_static and republished periodically, so subscribers still receive it even when the
 // ROS containers start after Play mode (the endpoint latch only caches what it has received).
 // Uses renderer bounds, no colliders.
 // Convention: Unity x -> grid column, Unity z -> grid row; data row-major (index = row*width + col).
 public class OccupancyGridPublisher : MonoBehaviour
 {
     [Header("ROS")]
-    public string topic   = "/map";
+    public string topic   = "/map/costmap_static";
     public string frameId = "map";
     [Tooltip("Seconds between republications of the last built grid (0 = publish once only).")]
     public float republishPeriod = 5f;
@@ -28,7 +28,7 @@ public class OccupancyGridPublisher : MonoBehaviour
     public float inflationRadius = 0f;
 
     [Header("Extra static obstacles")]
-    [Tooltip("Scene objects to ALSO rasterise into /map (e.g. the island) — things not " +
+    [Tooltip("Scene objects to ALSO rasterise into the costmap (e.g. the island) — things not " +
              "spawned by SceneBuilder. Drag them here so the scenario generator avoids them.")]
     public List<GameObject> extraObstacles = new List<GameObject>();
 

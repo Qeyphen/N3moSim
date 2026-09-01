@@ -107,7 +107,7 @@ class DatasetSweep(Node):
         self.regen = self.create_client(Trigger, "/sim/generate_scenario")
         self.create_subscription(Int32, "/dataset/frames", self.on_frames, 10)
         self.create_subscription(TrackArray, "/sim/tracks", self.on_tracks, 10)
-        self.create_subscription(OccupancyGrid, "/map", self.on_map, latched)
+        self.create_subscription(OccupancyGrid, "/map/costmap_static", self.on_map, latched)
         self.create_subscription(PoseStamped, "/sim/boat/pose", self.on_ego_pose, 10)
 
         self.get_logger().info(f"sweep starting — target {self.target} frames. Waiting for traffic...")

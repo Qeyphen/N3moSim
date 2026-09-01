@@ -35,7 +35,7 @@ services:
     restart: unless-stopped
 
   # Scenario engine (traffic). Part of the integrated `rviz` profile.
-  # Reads Unity's /map as the costmap, auto-generates on the first map, and
+  # Reads Unity's /map/costmap_static costmap, auto-generates on the first map, and
   # publishes /sim/tracks + /sim/tracks/markers. Run `docker compose build` first
   # so the image has the current scenario code + the tracks_markers node.
   scenario:
@@ -63,7 +63,7 @@ services:
         source /opt/ros/humble/setup.bash
         source /root/ros2_ws/install/setup.bash
         ros2 run n3_sim tracks_markers &
-        ros2 run n3_sim scenario_generator --ros-args -r /map/costmap_static:=/map -p gen_on_first_costmap:=true -p gen_track_count:=8 -p gen_spawn_spread_s:=20.0 -p gen_max_waypoints:=10 -p "gen_type_names:=[sailboat,kayak,paddleboard,swimmer,dinghy,debris,windsurf,kitesurf]"
+        ros2 run n3_sim scenario_generator --ros-args -p gen_on_first_costmap:=true -p gen_track_count:=8 -p gen_spawn_spread_s:=20.0 -p gen_max_waypoints:=10 -p "gen_type_names:=[sailboat,kayak,paddleboard,swimmer,dinghy,debris,windsurf,kitesurf]"
     restart: unless-stopped
 
   # Integrated GUI: `docker compose --profile rviz up`. Needs XQuartz/X11 on the host.
