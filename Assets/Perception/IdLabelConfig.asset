@@ -49,5 +49,8 @@ MonoBehaviour:
   - label: debris
     id: 12
     hierarchyRelation: 0
+  - label: swimmer
+    id: 13
+    hierarchyRelation: 0
   autoAssignIds: 1
   startingLabelId: 1
