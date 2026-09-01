@@ -1,0 +1,70 @@
+# Reference plan: ~1000 images at 5 Hz across the 4 area types, varied
+# weather presets, lighting overrides and day/dusk times of day.
+# Every scenario carries an explicit scene_seed, so each run is
+# deterministic and the whole dataset is traceable via manifest.json.
+#
+# 8 scenarios x 25 s x 5 Hz = ~1000 frames, ~4 min of capture.
+#
+# Run: python3 tools/run_dataset_plan.py tools/plans/dataset-1k.yaml \
+#          --output-root recordings/dataset-1k
+
+name: dataset-1k
+
+defaults:
+  duration: 25
+  capture_hz: 5
+  track_count: 18
+  occupied_fraction: 0.8
+
+scenarios:
+  - name: lake-clear-day
+    area_type: lake
+    weather: clear
+    time_of_day: 11.0
+    scene_seed: 101
+
+  - name: lake-cloudy-dusk
+    area_type: lake
+    weather: cloudy
+    time_of_day: 18.5
+    scene_seed: 102
+
+  - name: coastal-overcast-day
+    area_type: coastal
+    weather: overcast
+    time_of_day: 14.0
+    scene_seed: 201
+
+  - name: coastal-foggy-dusk
+    area_type: coastal
+    weather: foggy
+    time_of_day: 19.0
+    fog: 0.45
+    scene_seed: 202
+
+  - name: harbor-cloudy-day
+    area_type: harbor
+    weather: cloudy
+    time_of_day: 10.0
+    scene_seed: 301
+
+  - name: harbor-stormy-dusk
+    area_type: harbor
+    weather: stormy
+    time_of_day: 18.0
+    wave: 0.9
+    wind: 0.6
+    scene_seed: 302
+
+  - name: open-sea-clear-morning
+    area_type: open_sea
+    weather: clear
+    time_of_day: 8.0
+    scene_seed: 401
+
+  - name: open-sea-overcast-dusk
+    area_type: open_sea
+    weather: overcast
+    time_of_day: 19.5
+    cloudiness: 0.8
+    scene_seed: 402
