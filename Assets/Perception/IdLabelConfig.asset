@@ -52,5 +52,8 @@ MonoBehaviour:
   - label: swimmer
     id: 13
     hierarchyRelation: 0
+  - label: windsurf
+    id: 14
+    hierarchyRelation: 0
   autoAssignIds: 1
   startingLabelId: 1

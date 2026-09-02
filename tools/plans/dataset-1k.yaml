@@ -1,6 +1,7 @@
 # Reference plan: ~1000 images at 5 Hz across the 4 area types, varied
 # weather presets, lighting overrides and day/dusk times of day.
-# Every scenario carries an explicit scene_seed, so each run is
+# Every scenario declares its exact traffic mix (type_counts) and
+# an explicit scene_seed, so each run is
 # deterministic and the whole dataset is traceable via manifest.json.
 #
 # 8 scenarios x 25 s x 5 Hz = ~1000 frames, ~4 min of capture.
@@ -13,29 +14,56 @@ name: dataset-1k
 defaults:
   duration: 25
   capture_hz: 5
-  track_count: 18
   occupied_fraction: 0.8
 
 scenarios:
   - name: lake-clear-day
+    type_counts:
+      kayak: 3
+      pedalo: 2
+      swimmer: 2
+      paddleboard: 2
+      dinghy: 2
+      debris: 1
     area_type: lake
     weather: clear
     time_of_day: 11.0
     scene_seed: 101
 
   - name: lake-cloudy-dusk
+    type_counts:
+      kayak: 3
+      dinghy: 3
+      swimmer: 2
+      pedalo: 2
+      motorboat: 1
+      debris: 1
     area_type: lake
     weather: cloudy
     time_of_day: 18.5
     scene_seed: 102
 
   - name: coastal-overcast-day
+    type_counts:
+      sailboat: 3
+      motorboat: 2
+      fishing_boat: 2
+      jetski: 2
+      kayak: 2
+      buoy: 1
     area_type: coastal
     weather: overcast
     time_of_day: 14.0
     scene_seed: 201
 
   - name: coastal-foggy-dusk
+    type_counts:
+      fishing_boat: 3
+      sailboat: 2
+      motorboat: 2
+      dinghy: 2
+      buoy: 2
+      debris: 1
     area_type: coastal
     weather: foggy
     time_of_day: 19.0
@@ -43,12 +71,24 @@ scenarios:
     scene_seed: 202
 
   - name: harbor-cloudy-day
+    type_counts:
+      motorboat: 3
+      fishing_boat: 3
+      sailboat: 2
+      jetski: 2
+      buoy: 2
     area_type: harbor
     weather: cloudy
     time_of_day: 10.0
     scene_seed: 301
 
   - name: harbor-stormy-dusk
+    type_counts:
+      fishing_boat: 3
+      motorboat: 3
+      dinghy: 2
+      sailboat: 2
+      debris: 2
     area_type: harbor
     weather: stormy
     time_of_day: 18.0
@@ -57,12 +97,22 @@ scenarios:
     scene_seed: 302
 
   - name: open-sea-clear-morning
+    type_counts:
+      sailboat: 3
+      motorboat: 3
+      fishing_boat: 3
+      jetski: 3
     area_type: open_sea
     weather: clear
     time_of_day: 8.0
     scene_seed: 401
 
   - name: open-sea-overcast-dusk
+    type_counts:
+      fishing_boat: 4
+      sailboat: 3
+      motorboat: 3
+      debris: 2
     area_type: open_sea
     weather: overcast
     time_of_day: 19.5
