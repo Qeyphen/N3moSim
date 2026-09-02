@@ -529,6 +529,23 @@ def generate_scenario(
             ExclusionZone(x=x, y=y, radius_m=max(track_separation_m, nav_area.resolution * 2))
         )
 
+        # Static types (zero speed range, e.g. buoys) stand at their spawn point
+        # for the whole scenario: the waypoint walk below assumes motion and
+        # would never accumulate lifespan at zero speed.
+        if hi_spd <= 0:
+            tracks.append(
+                TrackDef(
+                    id=i + 1,
+                    type_name=type_name,
+                    type_value=type_value,
+                    spawn_time_s=spawn_times[i],
+                    despawn_time_s=duration_s,
+                    waypoints=wps,
+                    heading_mode="fixed",
+                )
+            )
+            continue
+
         heading_rad = rng.uniform(0, 2 * math.pi)
         sigma_rad = heading_sigma * DEG2RAD
         spawn_t = spawn_times[i]
