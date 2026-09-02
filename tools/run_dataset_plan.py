@@ -198,6 +198,16 @@ def run_plan(plan, plan_path, output_root, dry_run=False, runner=subprocess.run)
             output_root,
         )
 
+    # All scenarios have recorded and copied their frames out; now that no more
+    # recording is in flight, clean the shared SOLO folder in one pass so the
+    # Unity data folder is left empty (frames never accumulate between plans).
+    try:
+        from run_scenario import cleanup_data_folder, unity_data_folder
+        removed = cleanup_data_folder(unity_data_folder())
+        print(f"Cleaned Unity data folder ({removed} capture items removed).")
+    except Exception as exc:  # never fail the plan on cleanup
+        print(f"Note: could not clean Unity data folder: {exc}")
+
     manifest = build_manifest(
         plan, plan_path, output_root, entries, started_at, finished_at=utc_now()
     )

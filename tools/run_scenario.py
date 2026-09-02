@@ -316,43 +316,54 @@ def wait_for_capture(
     return new
 
 
-def harvest_and_restore(output_dir: Path, data_folder: Path, before: set[Path]) -> int:
-    """Move the run's frames into output_dir, then delete everything the run
-    added so the Unity data folder is byte-for-byte back to its pre-run state.
-    Returns the number of frame_data files harvested."""
+def copy_new_frames(output_dir: Path, added: set[Path], data_folder: Path) -> int:
+    """Copy the run's frames into output_dir WITHOUT touching the Unity data
+    folder. Perception owns the SOLO dir for the whole Play session and keeps
+    appending to it; deleting or moving anything out of it mid-session corrupts
+    its state and breaks the next scenario. So each scenario only copies its own
+    new step files (Perception numbers them globally, so they never collide);
+    the data folder is cleaned once, after the plan."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    added = snapshot_capture_state(data_folder) - before
 
-    # Copy the SOLO schema definitions so the scenario folder is standalone.
-    for p in added:
-        if p.name in SOLO_DEFINITION_FILES:
-            dst = output_dir / p.name
-            if not dst.exists():
-                shutil.copy2(str(p), str(dst))
+    # Copy the schema definitions from the live SOLO dir (they are written once
+    # per session, so for the 2nd+ scenario they are not "new" but still needed).
+    for entry in data_folder.iterdir():
+        if entry.is_dir() and entry.name.startswith("solo"):
+            for name in SOLO_DEFINITION_FILES:
+                src = entry / name
+                dst = output_dir / name
+                if src.exists() and not dst.exists():
+                    shutil.copy2(str(src), str(dst))
 
-    # Move the frame files (step*.* inside sequence dirs) into the output.
     frames = 0
     for p in sorted(added):
         if p.is_file() and p.name.startswith("step") and p.parent.name.startswith("sequence."):
             dst_dir = output_dir / p.parent.name
             dst_dir.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(p), str(dst_dir / p.name))
+            shutil.copy2(str(p), str(dst_dir / p.name))
             if p.name.endswith(".frame_data.json"):
                 frames += 1
-
-    # Delete everything else the run added (leftover metadata, empty sequence
-    # dirs, any new solo* dir), deepest first, so the folder equals `before`.
-    for p in sorted(added, key=lambda q: len(str(q)), reverse=True):
-        if not p.exists():
-            continue
-        if p.is_dir():
-            try:
-                p.rmdir()
-            except OSError:
-                pass
-        else:
-            p.unlink()
     return frames
+
+
+def cleanup_data_folder(data_folder: Path) -> int:
+    """Remove all capture output (solo* dirs + root metadata JSONs) from the
+    Unity data folder, leaving editor telemetry alone. Safe to call only when no
+    recording is in flight (i.e. after a whole plan), never between scenarios of
+    a live Play session. Returns the number of entries removed."""
+    if not data_folder.exists():
+        return 0
+    removed = 0
+    for entry in data_folder.iterdir():
+        if entry.name in DATA_FOLDER_IGNORE:
+            continue
+        if entry.is_dir() and entry.name.startswith("solo"):
+            shutil.rmtree(entry, ignore_errors=True)
+            removed += 1
+        elif entry.is_file() and entry.suffix == ".json":
+            entry.unlink()
+            removed += 1
+    return removed
 
 
 def drive_until_done(
@@ -530,18 +541,13 @@ def main() -> None:
     if return_code != 0 and not hit_deadline:
         raise subprocess.CalledProcessError(return_code, cmd)
 
-    wait_for_capture(data_folder, capture_before)
-    harvest_and_restore(output_dir, data_folder, capture_before)
+    added = wait_for_capture(data_folder, capture_before)
+    copy_new_frames(output_dir, added, data_folder)
     frame_count = count_frame_jsons(output_dir)
     write_run_summary(spec, output_dir, frame_count)
 
-    capture_after = snapshot_capture_state(data_folder)
-    if capture_after == capture_before:
-        print("Unity data folder restored to its pre-run state.")
-    else:
-        leaked = sorted(str(p) for p in capture_after - capture_before)
-        print(f"WARNING: data folder not fully restored, leftover: {leaked[:5]}")
-
+    # The Unity data folder is left untouched here (Perception is still writing
+    # into it across scenarios). run_dataset_plan cleans it once at the end.
     print(f"Saved run -> {output_dir}")
     print(f"Frames captured: {frame_count}")
 
