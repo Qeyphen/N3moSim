@@ -1,0 +1,121 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &5966143443457636792
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 375253922531879778}
+  m_Layer: 0
+  m_Name: InflatableRaft
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &375253922531879778
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5966143443457636792}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 4.25057, y: 3.05433, z: 4.25085}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 5937050355851821209}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1001 &6191915858292041586
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 375253922531879778}
+    m_Modifications:
+    - target: {fileID: -8679921383154817045, guid: 8d26b01d6052b4449ae35017a1b9560e, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -0.007849693
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 8d26b01d6052b4449ae35017a1b9560e, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -0.5641701
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 8d26b01d6052b4449ae35017a1b9560e, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -0.00785017
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 8d26b01d6052b4449ae35017a1b9560e, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 8d26b01d6052b4449ae35017a1b9560e, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 8d26b01d6052b4449ae35017a1b9560e, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 8d26b01d6052b4449ae35017a1b9560e, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 8d26b01d6052b4449ae35017a1b9560e, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 8d26b01d6052b4449ae35017a1b9560e, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 8d26b01d6052b4449ae35017a1b9560e, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: 8d26b01d6052b4449ae35017a1b9560e, type: 3}
+      propertyPath: m_Name
+      value: InflatableRaft
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 8d26b01d6052b4449ae35017a1b9560e, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2637246268406622525}
+  m_SourcePrefab: {fileID: 100100000, guid: 8d26b01d6052b4449ae35017a1b9560e, type: 3}
+--- !u!4 &5937050355851821209 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 8d26b01d6052b4449ae35017a1b9560e, type: 3}
+  m_PrefabInstance: {fileID: 6191915858292041586}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &6426482166885505571 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: 8d26b01d6052b4449ae35017a1b9560e, type: 3}
+  m_PrefabInstance: {fileID: 6191915858292041586}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &2637246268406622525
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6426482166885505571}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8b33f0bc2b78db642a758f07826d0dd0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Perception.Runtime::UnityEngine.Perception.GroundTruth.LabelManagement.Labeling
+  labels:
+  - raft
+  - dynamic_obstacle
+  useAutoLabeling: 0
+  autoLabelingSchemeType: 
