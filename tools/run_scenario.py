@@ -230,37 +230,65 @@ def publish_scenario_info(spec: ScenarioRunSpec, output_dir: Path) -> None:
     )
 
 
-def find_solo_dirs() -> dict[Path, float]:
-    home = str(Path.home())
-    patterns = [
-        Path(p)
-        for pat in (
-            f"{home}/.config/unity3d/*/*/solo*",
-            f"{home}/Library/Application Support/*/*/solo*",
-        )
-        for p in glob.glob(pat)
-    ]
-    result: dict[Path, float] = {}
-    for path in patterns:
-        if path.is_dir():
-            result[path.resolve()] = path.stat().st_mtime
-    return result
+# SOLO root files that just define the dataset schema; identical across the
+# stereo cameras, so we keep one copy and drop the duplicate.
+SOLO_DEFINITION_FILES = frozenset({
+    "annotation_definitions.json",
+    "metadata.json",
+    "metric_definitions.json",
+    "sensor_definitions.json",
+})
 
 
-def detect_updated_solo_dir(before: dict[Path, float], *, timeout_s: float = 30.0) -> Path:
-    deadline = time.monotonic() + timeout_s
-    while time.monotonic() < deadline:
-        after = find_solo_dirs()
-        changed = [
-            path
-            for path, mtime in after.items()
-            if path not in before or mtime > before.get(path, 0.0) + 1e-6
-        ]
-        if changed:
-            changed.sort(key=lambda p: after[p], reverse=True)
-            return changed[0]
-        time.sleep(0.5)
-    raise RuntimeError("No updated SOLO dataset directory detected after run")
+def find_solo_dirs(home: str | None = None) -> list[Path]:
+    home = home or str(Path.home())
+    dirs: list[Path] = []
+    for pat in (
+        f"{home}/.config/unity3d/*/*/solo*",
+        f"{home}/Library/Application Support/*/*/solo*",
+    ):
+        for p in glob.glob(pat):
+            path = Path(p)
+            if path.is_dir():
+                dirs.append(path.resolve())
+    return sorted(set(dirs))
+
+
+def purge_solo_dirs(solo_dirs: list[Path]) -> list[str]:
+    """Delete leftover SOLO dirs. A dir present before a run is stale residue:
+    run_scenario always harvests and removes its own output, so anything here
+    is from an older or interrupted run and would otherwise pile up on disk."""
+    removed = []
+    for d in solo_dirs:
+        shutil.rmtree(d, ignore_errors=True)
+        removed.append(d.name)
+    return removed
+
+
+def harvest_solo_dirs(output_dir: Path, solo_dirs: list[Path]) -> int:
+    """Merge every SOLO dir produced by the run into output_dir, then delete
+    them so the Unity data folder is left empty. The stereo rig writes one dir
+    per camera; each camera's sequence is kept, renumbered to avoid collision.
+    Returns the number of sequences harvested."""
+    if not solo_dirs:
+        raise RuntimeError("No SOLO dataset directory was produced by the run")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    next_seq = 0
+    for solo in solo_dirs:
+        for child in sorted(solo.iterdir()):
+            if child.is_dir() and child.name.startswith("sequence."):
+                shutil.move(str(child), str(output_dir / f"sequence.{next_seq}"))
+                next_seq += 1
+                continue
+            target = output_dir / child.name
+            if target.exists():
+                if child.name in SOLO_DEFINITION_FILES:
+                    child.unlink()
+                    continue
+                target = output_dir / f"{child.stem}__{solo.name}{child.suffix}"
+            shutil.move(str(child), str(target))
+        solo.rmdir()
+    return next_seq
 
 
 def drive_until_done(
@@ -290,18 +318,6 @@ def drive_until_done(
 
 def count_frame_jsons(path: Path) -> int:
     return len(list(path.rglob("*.frame_data.json")))
-
-
-def move_solo_contents_to_output(solo_dir: Path, output_dir: Path) -> None:
-    output_dir.mkdir(parents=True, exist_ok=True)
-    for child in solo_dir.iterdir():
-        target = output_dir / child.name
-        if target.exists():
-            raise RuntimeError(
-                f"Output path already contains '{target.name}'. Use an empty --output directory."
-            )
-        shutil.move(str(child), str(target))
-    solo_dir.rmdir()
 
 
 def write_scene_spec(spec: ScenarioRunSpec, output_dir: Path) -> None:
@@ -408,6 +424,10 @@ def main() -> None:
     print("Ensuring ros_bridge and scenario services are up...")
     run(["docker", "compose", "up", "-d", "ros_bridge", "scenario"])
 
+    residue = purge_solo_dirs(find_solo_dirs())
+    if residue:
+        print(f"Removed {len(residue)} stale SOLO dir(s) before capture: {', '.join(residue)}")
+
     spec.generated_scenario_path = generate_scene_once(spec)
     print(f"Scene template generated once: {spec.generated_scenario_path}")
 
@@ -430,7 +450,6 @@ def main() -> None:
         f"-p record_start_delay_s:={spec.record_start_delay_s}"
     )
 
-    before_solo = find_solo_dirs()
     proc = start_ros_exec(cmd)
     hit_deadline = drive_until_done(
         proc,
@@ -441,8 +460,10 @@ def main() -> None:
     if return_code != 0 and not hit_deadline:
         raise subprocess.CalledProcessError(return_code, cmd)
 
-    solo_dir = detect_updated_solo_dir(before_solo)
-    move_solo_contents_to_output(solo_dir, output_dir)
+    harvest_solo_dirs(output_dir, find_solo_dirs())
+    leftover = find_solo_dirs()
+    if leftover:
+        raise RuntimeError(f"SOLO dirs remain after harvest: {[str(p) for p in leftover]}")
     frame_count = count_frame_jsons(output_dir)
     write_run_summary(spec, output_dir, frame_count)
 
