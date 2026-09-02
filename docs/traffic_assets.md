@@ -38,8 +38,11 @@ missing. For each of `Pedalo`, `InflatableRaft`, `Swimmer`:
 
 ## Per-type validation checklist
 
-Run the smoke plan (`tools/run_dataset_plan.py` with a 2-scenario plan), pause
-Play mode, and check every spawned `track_*` object:
+Run the smoke plan (`tools/run_dataset_plan.py` with a 2-scenario plan) twice:
+a first hands-off pass for the data (pausing the editor freezes rendering while
+the ROS-side capture window keeps elapsing, so frames are silently lost), then
+a second throwaway pass where you pause freely and check every spawned
+`track_*` object:
 
 | Check | How |
 |---|---|
