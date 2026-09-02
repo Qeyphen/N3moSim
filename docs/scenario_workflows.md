@@ -210,13 +210,13 @@ Inside `--output-root`:
   - rewritten after every scenario, so an interrupted run leaves a usable partial manifest
 - `001-<scenario-name>/`, `002-<scenario-name>/`, ...
   - one folder per scenario, containing the standard single-run output (`scene_spec.json`, `run_summary.json`, SOLO data, Unity metadata)
-  - Perception keeps one SOLO dir for the whole Play session (both stereo
-    cameras write into each `sequence.N`) and appends a sequence per run. Each
-    run lifts out only its own new sequence into the scenario folder and copies
-    the SOLO schema definitions alongside, never touching the live SOLO dir. The
-    frame data (the only thing that grows) therefore never accumulates in the
-    Unity data folder; the lightweight SOLO shell is recreated each session and
-    can be cleared with `rm -rf "<data folder>/solo"*` while Unity is NOT in Play
+  - Perception keeps one SOLO dir with a single `sequence.0` for the whole Play
+    session and appends every frame as `stepN.*` (both stereo cameras). Each run
+    moves out only the step files that appeared while it ran, mirroring them into
+    the scenario folder and copying the SOLO schema definitions alongside, and
+    never removes the live SOLO dir. Frames therefore never accumulate in the
+    Unity data folder; clear the lightweight SOLO shell with
+    `rm -rf "<data folder>/solo"*` while Unity is NOT in Play
 
 ## `tools/run_defense_scene.sh`
 

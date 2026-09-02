@@ -255,48 +255,67 @@ def find_solo_dirs(home: str | None = None) -> list[Path]:
     return sorted(set(dirs))
 
 
-def snapshot_sequences(home: str | None = None) -> set[Path]:
-    """All sequence.N dirs currently under the SOLO dirs. Perception keeps one
-    SOLO dir for the whole Play session (both stereo cameras write into it) and
-    appends a new sequence per recording, so a run's own output is exactly the
-    sequences that appear after it started. We must never delete the SOLO dir
-    itself, only lift out the sequences this run produced."""
-    seqs: set[Path] = set()
+def snapshot_step_files(home: str | None = None) -> set[Path]:
+    """Every per-frame file under any SOLO sequence. Perception keeps one SOLO
+    dir with a single `sequence.0` for the whole Play session and appends each
+    frame as `stepN.*` (both stereo cameras + frame_data), so a run's output is
+    exactly the step files that appear after it started. We lift those out and
+    leave the sequence dir in place for Perception to keep writing into."""
+    files: set[Path] = set()
     for solo in find_solo_dirs(home):
-        for child in solo.iterdir():
-            if child.is_dir() and child.name.startswith("sequence."):
-                seqs.add(child.resolve())
-    return seqs
+        for seq in solo.glob("sequence.*"):
+            for f in seq.iterdir():
+                if f.is_file() and f.name.startswith("step"):
+                    files.add(f.resolve())
+    return files
 
 
-def wait_for_new_sequences(
-    before: set[Path], *, timeout_s: float = 45.0, settle_s: float = 3.0
-) -> list[Path]:
+def wait_for_new_step_files(
+    before: set[Path], *, timeout_s: float = 45.0, settle_s: float = 4.0
+) -> set[Path]:
     deadline = time.monotonic() + timeout_s
+    last_count = -1
+    stable_at: float | None = None
     while time.monotonic() < deadline:
-        if snapshot_sequences() - before:
-            time.sleep(settle_s)  # let both cameras' frames finish flushing
-            return sorted(snapshot_sequences() - before)
+        new = snapshot_step_files() - before
+        if new and len(new) == last_count:
+            if stable_at is not None and time.monotonic() - stable_at >= settle_s:
+                return snapshot_step_files() - before
+        else:
+            last_count = len(new)
+            stable_at = time.monotonic() if new else None
         time.sleep(0.5)
-    raise RuntimeError("No new SOLO sequence appeared after the run")
+    result = snapshot_step_files() - before
+    if not result:
+        raise RuntimeError("No new SOLO frames appeared after the run")
+    return result
 
 
-def harvest_sequences(output_dir: Path, new_sequences: list[Path]) -> int:
-    """Move the run's new sequences into output_dir and copy the SOLO schema
-    definitions alongside, leaving the SOLO dir intact for the session. The
-    frame data (the only thing that grows) never stays in the Unity folder."""
-    if not new_sequences:
-        raise RuntimeError("No new SOLO sequence to harvest")
+def harvest_step_files(
+    output_dir: Path, new_files: set[Path], home: str | None = None
+) -> int:
+    """Move the run's frame files out of the live SOLO sequence into output_dir
+    (mirroring the sequence sub-folder) and copy the SOLO schema definitions
+    alongside. Frames never accumulate in the Unity data folder, and the SOLO
+    dir Perception is actively writing to is never removed."""
+    if not new_files:
+        raise RuntimeError("No new SOLO frames to harvest")
     output_dir.mkdir(parents=True, exist_ok=True)
-    for seq in new_sequences:
+    for solo in find_solo_dirs(home):
         for name in SOLO_DEFINITION_FILES:
-            src = seq.parent / name
+            src = solo / name
             dst = output_dir / name
             if src.exists() and not dst.exists():
                 shutil.copy2(str(src), str(dst))
-    for i, seq in enumerate(sorted(new_sequences)):
-        shutil.move(str(seq), str(output_dir / f"sequence.{i}"))
-    return len(new_sequences)
+    moved = 0
+    for f in sorted(new_files):
+        if not f.exists():
+            continue
+        dst_dir = output_dir / f.parent.name
+        dst_dir.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(f), str(dst_dir / f.name))
+        moved += 1
+    return moved
 
 
 def drive_until_done(
@@ -432,7 +451,7 @@ def main() -> None:
     print("Ensuring ros_bridge and scenario services are up...")
     run(["docker", "compose", "up", "-d", "ros_bridge", "scenario"])
 
-    sequences_before = snapshot_sequences()
+    steps_before = snapshot_step_files()
 
     spec.generated_scenario_path = generate_scene_once(spec)
     print(f"Scene template generated once: {spec.generated_scenario_path}")
@@ -466,7 +485,7 @@ def main() -> None:
     if return_code != 0 and not hit_deadline:
         raise subprocess.CalledProcessError(return_code, cmd)
 
-    harvest_sequences(output_dir, wait_for_new_sequences(sequences_before))
+    harvest_step_files(output_dir, wait_for_new_step_files(steps_before))
     frame_count = count_frame_jsons(output_dir)
     write_run_summary(spec, output_dir, frame_count)
 

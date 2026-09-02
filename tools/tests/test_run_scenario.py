@@ -1,4 +1,4 @@
-"""Tests for SOLO sequence harvest. Filesystem only, no Docker/ROS/Unity."""
+"""Tests for SOLO frame harvest. Filesystem only, no Docker/ROS/Unity."""
 
 import os
 import sys
@@ -12,79 +12,74 @@ import run_scenario
 
 
 def make_solo(root, name="solo"):
-    """A session SOLO dir with schema definitions and no sequences yet."""
-    solo = Path(root) / name
-    solo.mkdir(parents=True)
+    """A session SOLO dir with schema definitions and an empty sequence.0,
+    laid out under the real Unity data-folder path the globber scans."""
+    base = Path(root) / "Library" / "Application Support" / "Co" / "Proj" / name
+    (base / "sequence.0").mkdir(parents=True)
     for f in ("annotation_definitions.json", "metadata.json"):
-        (solo / f).write_text("{}")
-    return solo
+        (base / f).write_text("{}")
+    return base
 
 
-def add_sequence(solo, index, frames=3):
-    """Append a sequence.N with both stereo cameras, as Perception would."""
-    seq = solo / f"sequence.{index}"
-    seq.mkdir()
-    for s in range(frames):
+def append_steps(solo, start, count):
+    """Append frames as Perception does: stepN.<cam>.png + stepN.frame_data.json."""
+    seq = solo / "sequence.0"
+    for s in range(start, start + count):
         for cam in ("camera_left", "camera_right"):
             (seq / f"step{s}.{cam}.png").write_text("img")
         (seq / f"step{s}.frame_data.json").write_text("{}")
-    return seq
 
 
 class TestHarvest(unittest.TestCase):
-    def test_moves_new_sequence_keeps_solo_dir(self):
+    def test_harvest_moves_frames_keeps_sequence_dir(self):
         with tempfile.TemporaryDirectory() as tmp:
-            out = Path(tmp) / "out"
             solo = make_solo(tmp)
-            new = add_sequence(solo, 0)
+            before = run_scenario.snapshot_step_files(home=tmp)
+            append_steps(solo, 0, 3)
+            new = run_scenario.snapshot_step_files(home=tmp) - before
 
-            run_scenario.harvest_sequences(out, [new])
+            out = Path(tmp) / "out"
+            run_scenario.harvest_step_files(out, new, home=tmp)
 
-            # sequence moved out, both cameras preserved
-            self.assertTrue((out / "sequence.0").is_dir())
+            # frames moved out, both cameras preserved, definitions copied
             self.assertEqual(len(list(out.rglob("*.frame_data.json"))), 3)
             self.assertEqual(len(list(out.rglob("*.png"))), 6)
-            # definitions copied, not moved
             self.assertTrue((out / "annotation_definitions.json").exists())
-            self.assertTrue((solo / "annotation_definitions.json").exists())
-            # the SOLO dir survives for the ongoing session
-            self.assertTrue(solo.is_dir())
-            self.assertFalse(new.exists())
+            # the live sequence dir survives, emptied of harvested frames
+            self.assertTrue((solo / "sequence.0").is_dir())
+            self.assertEqual(list((solo / "sequence.0").glob("step*")), [])
 
-    def test_second_scenario_only_takes_its_own_sequence(self):
+    def test_two_scenarios_split_by_new_steps(self):
         with tempfile.TemporaryDirectory() as tmp:
-            # snapshot_sequences globs the real Unity data-folder layout
-            solo = make_solo(Path(tmp) / "Library" / "Application Support" / "Co" / "Proj")
-            # scenario 1
-            before1 = run_scenario.snapshot_sequences(home=tmp)
-            add_sequence(solo, 0)
-            got1 = sorted(run_scenario.snapshot_sequences(home=tmp) - before1)
-            run_scenario.harvest_sequences(Path(tmp) / "s1", got1)
-            # scenario 2: Perception appends sequence.1 to the SAME solo dir
-            before2 = run_scenario.snapshot_sequences(home=tmp)
-            add_sequence(solo, 1)
-            got2 = sorted(run_scenario.snapshot_sequences(home=tmp) - before2)
-            run_scenario.harvest_sequences(Path(tmp) / "s2", got2)
+            solo = make_solo(tmp)
+            # scenario 1 appends steps 0..2, scenario 2 appends 3..5 (same seq.0)
+            b1 = run_scenario.snapshot_step_files(home=tmp)
+            append_steps(solo, 0, 3)
+            run_scenario.harvest_step_files(
+                Path(tmp) / "s1", run_scenario.snapshot_step_files(home=tmp) - b1, home=tmp)
+            b2 = run_scenario.snapshot_step_files(home=tmp)
+            append_steps(solo, 3, 3)
+            run_scenario.harvest_step_files(
+                Path(tmp) / "s2", run_scenario.snapshot_step_files(home=tmp) - b2, home=tmp)
 
             self.assertEqual(len(list((Path(tmp) / "s1").rglob("*.frame_data.json"))), 3)
             self.assertEqual(len(list((Path(tmp) / "s2").rglob("*.frame_data.json"))), 3)
 
+    def test_ignores_pre_existing_residue(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            solo = make_solo(tmp)
+            append_steps(solo, 0, 2)  # stale residue from an earlier session
+            before = run_scenario.snapshot_step_files(home=tmp)
+            append_steps(solo, 2, 3)  # this run's frames
+            new = run_scenario.snapshot_step_files(home=tmp) - before
+            run_scenario.harvest_step_files(Path(tmp) / "out", new, home=tmp)
+            # only the run's own 3 frames are harvested, not the 2 residue
+            self.assertEqual(len(list((Path(tmp) / "out").rglob("*.frame_data.json"))), 3)
+
     def test_empty_raises(self):
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaisesRegex(RuntimeError, "No new SOLO sequence"):
-                run_scenario.harvest_sequences(Path(tmp) / "out", [])
-
-
-class TestDiscovery(unittest.TestCase):
-    def test_snapshot_sequences_scopes_to_home(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            base = Path(tmp) / "Library" / "Application Support" / "Co" / "Proj"
-            solo = base / "solo"
-            solo.mkdir(parents=True)
-            add_sequence(solo, 0)
-            add_sequence(solo, 1)
-            found = {p.name for p in run_scenario.snapshot_sequences(home=tmp)}
-            self.assertEqual(found, {"sequence.0", "sequence.1"})
+            with self.assertRaisesRegex(RuntimeError, "No new SOLO frames"):
+                run_scenario.harvest_step_files(Path(tmp) / "out", set())
 
 
 if __name__ == "__main__":
