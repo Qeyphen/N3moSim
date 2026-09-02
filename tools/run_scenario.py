@@ -254,15 +254,31 @@ def find_solo_dirs(home: str | None = None) -> list[Path]:
     return sorted(set(dirs))
 
 
-def purge_solo_dirs(solo_dirs: list[Path]) -> list[str]:
-    """Delete leftover SOLO dirs. A dir present before a run is stale residue:
-    run_scenario always harvests and removes its own output, so anything here
-    is from an older or interrupted run and would otherwise pile up on disk."""
-    removed = []
-    for d in solo_dirs:
-        shutil.rmtree(d, ignore_errors=True)
-        removed.append(d.name)
-    return removed
+def solo_dir_mtimes(home: str | None = None) -> dict[Path, float]:
+    return {p: p.stat().st_mtime for p in find_solo_dirs(home)}
+
+
+def wait_for_fresh_solo_dirs(
+    before: dict[Path, float], *, timeout_s: float = 30.0, settle_s: float = 3.0
+) -> list[Path]:
+    """Return the SOLO dirs created or updated since `before`. Perception owns
+    its output dirs for the whole Play session and finalises them when a
+    recording stops, so we must never delete a dir it is still using: we only
+    ever harvest the ones this run produced. The short settle lets the second
+    stereo camera's dir land before we read the set."""
+    def fresh() -> list[Path]:
+        return [
+            p for p in find_solo_dirs()
+            if p not in before or p.stat().st_mtime > before.get(p, 0.0) + 1e-6
+        ]
+
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if fresh():
+            time.sleep(settle_s)
+            return fresh()
+        time.sleep(0.5)
+    raise RuntimeError("No SOLO dataset directory appeared after the run")
 
 
 def harvest_solo_dirs(output_dir: Path, solo_dirs: list[Path]) -> int:
@@ -424,9 +440,7 @@ def main() -> None:
     print("Ensuring ros_bridge and scenario services are up...")
     run(["docker", "compose", "up", "-d", "ros_bridge", "scenario"])
 
-    residue = purge_solo_dirs(find_solo_dirs())
-    if residue:
-        print(f"Removed {len(residue)} stale SOLO dir(s) before capture: {', '.join(residue)}")
+    solo_before = solo_dir_mtimes()
 
     spec.generated_scenario_path = generate_scene_once(spec)
     print(f"Scene template generated once: {spec.generated_scenario_path}")
@@ -460,10 +474,7 @@ def main() -> None:
     if return_code != 0 and not hit_deadline:
         raise subprocess.CalledProcessError(return_code, cmd)
 
-    harvest_solo_dirs(output_dir, find_solo_dirs())
-    leftover = find_solo_dirs()
-    if leftover:
-        raise RuntimeError(f"SOLO dirs remain after harvest: {[str(p) for p in leftover]}")
+    harvest_solo_dirs(output_dir, wait_for_fresh_solo_dirs(solo_before))
     frame_count = count_frame_jsons(output_dir)
     write_run_summary(spec, output_dir, frame_count)
 

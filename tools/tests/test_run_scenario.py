@@ -62,16 +62,7 @@ class TestHarvest(unittest.TestCase):
             self.assertEqual(len(list(out.rglob("step0.cam.png"))), 2)
 
 
-class TestPurge(unittest.TestCase):
-    def test_removes_all_given_dirs(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            a = make_solo(tmp, "solo", "cam", 1)
-            b = make_solo(tmp, "solo_1", "cam", 1)
-            removed = run_scenario.purge_solo_dirs([a, b])
-            self.assertEqual(sorted(removed), ["solo", "solo_1"])
-            self.assertFalse(a.exists())
-            self.assertFalse(b.exists())
-
+class TestDiscovery(unittest.TestCase):
     def test_find_solo_dirs_scopes_to_home(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / "Library" / "Application Support" / "Co" / "Proj"

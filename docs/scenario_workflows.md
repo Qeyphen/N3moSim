@@ -210,10 +210,12 @@ Inside `--output-root`:
   - rewritten after every scenario, so an interrupted run leaves a usable partial manifest
 - `001-<scenario-name>/`, `002-<scenario-name>/`, ...
   - one folder per scenario, containing the standard single-run output (`scene_spec.json`, `run_summary.json`, SOLO data, Unity metadata)
-  - the stereo rig writes one SOLO dir per camera; `run_scenario.py` merges them
-    into `sequence.0`, `sequence.1`, ... inside the scenario folder, and deletes
-    every SOLO dir from Unity's data folder afterwards, so nothing accumulates
-    there between runs
+  - the stereo rig writes one SOLO dir per camera; each run harvests the dirs
+    it produced, merging them into `sequence.0`, `sequence.1`, ... inside the
+    scenario folder and deleting those dirs, so a run never leaves its own
+    output behind. Perception owns its dirs for the whole Play session, so
+    pre-existing residue from an earlier session is left untouched: clean it
+    with `rm -rf "<data folder>/solo"*` while Unity is NOT in Play
 
 ## `tools/run_defense_scene.sh`
 
