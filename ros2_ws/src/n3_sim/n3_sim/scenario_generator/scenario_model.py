@@ -336,34 +336,15 @@ def extract_navigable_area(
     origin_y: float,
     margin_m: float,
 ) -> NavigableArea:
-    """Build NavigableArea from OccupancyGrid data. Free cells have value 0."""
-    margin_cells = max(1, int(margin_m / resolution))
-    raw = [
-        [data[row * width + col] == 0 for col in range(width)] for row in range(height)
-    ]
-    # box erosion by margin_cells
-    eroded = [[False] * width for _ in range(height)]
-    for r in range(height):
-        for c in range(width):
-            if not raw[r][c]:
-                continue
-            navigable = True
-            for dr in range(-margin_cells, margin_cells + 1):
-                for dc in range(-margin_cells, margin_cells + 1):
-                    nr, nc = r + dr, c + dc
-                    if (
-                        nr < 0
-                        or nr >= height
-                        or nc < 0
-                        or nc >= width
-                        or not raw[nr][nc]
-                    ):
-                        navigable = False
-                        break
-                if not navigable:
-                    break
-            eroded[r][c] = navigable
+    """Build NavigableArea from OccupancyGrid data. Free cells have value 0.
 
+    A cell is navigable if every cell in its (2*margin+1) square neighbourhood is
+    free (cells within `margin` of the map edge are not, matching a box erosion).
+    Computed with a numpy integral image so the cost is O(width*height) whatever
+    the margin, instead of the naive O(width*height*margin^2) that took ~2 min on
+    a 1000x1000 grid."""
+    margin_cells = max(1, int(margin_m / resolution))
+    eroded = _box_erode_free(data, width, height, margin_cells)
     return NavigableArea(
         mask=eroded,
         resolution=resolution,
@@ -372,6 +353,63 @@ def extract_navigable_area(
         width=width,
         height=height,
     )
+
+
+def _box_erode_free(
+    data: list[int], width: int, height: int, margin: int
+) -> list[list[bool]]:
+    try:
+        import numpy as np
+    except ImportError:
+        return _box_erode_free_py(data, width, height, margin)
+
+    free = (np.asarray(data, dtype=np.int32).reshape(height, width) == 0)
+    # Integral image of free cells; window-sum == window area  =>  all free.
+    integral = np.zeros((height + 1, width + 1), dtype=np.int64)
+    integral[1:, 1:] = np.cumsum(np.cumsum(free.astype(np.int64), axis=0), axis=1)
+    out = np.zeros((height, width), dtype=bool)
+    r0, r1 = margin, height - margin
+    c0, c1 = margin, width - margin
+    if r1 > r0 and c1 > c0:
+        rows = np.arange(r0, r1)
+        cols = np.arange(c0, c1)
+        top = (rows - margin)[:, None]
+        bot = (rows + margin + 1)[:, None]
+        left = (cols - margin)[None, :]
+        right = (cols + margin + 1)[None, :]
+        window = (
+            integral[bot, right] - integral[top, right]
+            - integral[bot, left] + integral[top, left]
+        )
+        out[r0:r1, c0:c1] = window == (2 * margin + 1) ** 2
+    return out.tolist()
+
+
+def _box_erode_free_py(
+    data: list[int], width: int, height: int, margin: int
+) -> list[list[bool]]:
+    raw = [
+        [data[row * width + col] == 0 for col in range(width)] for row in range(height)
+    ]
+    eroded = [[False] * width for _ in range(height)]
+    for r in range(height):
+        for c in range(width):
+            if not raw[r][c]:
+                continue
+            navigable = True
+            for dr in range(-margin, margin + 1):
+                for dc in range(-margin, margin + 1):
+                    nr, nc = r + dr, c + dc
+                    if (
+                        nr < 0 or nr >= height or nc < 0 or nc >= width
+                        or not raw[nr][nc]
+                    ):
+                        navigable = False
+                        break
+                if not navigable:
+                    break
+            eroded[r][c] = navigable
+    return eroded
 
 
 def sample_spawn_times(
