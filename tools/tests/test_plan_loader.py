@@ -201,6 +201,12 @@ class TestPlanValidation(unittest.TestCase):
         with self.assertRaisesRegex(PlanError, "scene_seed values must be unique"):
             build_plan(doc)
 
+    def test_type_counts_force_track_count(self):
+        doc = minimal_plan(defaults={"track_count": 18})
+        doc["scenarios"][0]["type_counts"] = {"kayak": 3, "swimmer": 2}
+        plan = build_plan(doc)
+        self.assertEqual(plan.scenarios[0].args["track_count"], 5)
+
     def test_estimated_frames(self):
         doc = minimal_plan(defaults={"capture_hz": 5})
         plan = build_plan(doc)

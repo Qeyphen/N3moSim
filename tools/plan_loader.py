@@ -28,9 +28,9 @@ Plan schema:
         time_of_day: 11.0        # hour 0-24
         fog: 0.3                 # optional 0-1 overrides: fog, wave, wind,
         rain: 0.1                # cloudiness, rain
-        type_counts:             # optional exact object mix
-          sailboat: 6
-          kayak: 2
+        type_counts:             # exact object mix; overrides the generator's
+          sailboat: 6            # area presets and forces track_count to the
+          kayak: 2               # sum of the counts
 """
 
 from __future__ import annotations
@@ -335,6 +335,11 @@ def _build_scenario(raw, index, defaults):
     for key in REQUIRED_KEYS:
         if key not in args:
             raise PlanError(f"{ctx}: missing '{key}' (set it here or in 'defaults')")
+
+    # Explicit type_counts give exact control over the traffic mix: the track
+    # count then always equals the sum of the requested counts.
+    if "type_counts" in args:
+        args["track_count"] = sum(args["type_counts"].values())
 
     return Scenario(name=name, args=args)
 
