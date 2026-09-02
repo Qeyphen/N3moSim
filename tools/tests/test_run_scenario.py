@@ -1,4 +1,4 @@
-"""Tests for SOLO frame harvest. Filesystem only, no Docker/ROS/Unity."""
+"""Tests for SOLO capture harvest + data-folder restore. No Docker/ROS/Unity."""
 
 import os
 import sys
@@ -11,75 +11,97 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import run_scenario
 
 
-def make_solo(root, name="solo"):
-    """A session SOLO dir with schema definitions and an empty sequence.0,
-    laid out under the real Unity data-folder path the globber scans."""
-    base = Path(root) / "Library" / "Application Support" / "Co" / "Proj" / name
-    (base / "sequence.0").mkdir(parents=True)
-    for f in ("annotation_definitions.json", "metadata.json"):
-        (base / f).write_text("{}")
-    return base
+def write_project(root, company="DefaultCompany", product="N3moSim"):
+    ps = root / "ProjectSettings"
+    ps.mkdir(parents=True)
+    (ps / "ProjectSettings.asset").write_text(
+        f"PlayerSettings:\n  companyName: {company}\n  productName: {product}\n"
+    )
+    return root
 
 
-def append_steps(solo, start, count):
-    """Append frames as Perception does: stepN.<cam>.png + stepN.frame_data.json."""
-    seq = solo / "sequence.0"
+def make_data_folder(root):
+    """A Unity data folder with the editor-telemetry subdir and an empty solo."""
+    data = root / "Library" / "Application Support" / "DefaultCompany" / "N3moSim"
+    (data / "Unity" / "analytics").mkdir(parents=True)
+    (data / "solo").mkdir(parents=True)
+    return data
+
+
+def append_capture(data, start, count, extra_root_json=True):
+    """Simulate a Perception recording: frames as stepN.* in solo/sequence.0
+    plus per-run root metadata, as the real rig writes them."""
+    seq = data / "solo" / "sequence.0"
+    seq.mkdir(parents=True, exist_ok=True)
+    for name in ("annotation_definitions.json", "metadata.json"):
+        (data / "solo" / name).write_text("{}")
     for s in range(start, start + count):
         for cam in ("camera_left", "camera_right"):
             (seq / f"step{s}.{cam}.png").write_text("img")
         (seq / f"step{s}.frame_data.json").write_text("{}")
+    if extra_root_json:
+        (data / f"run_metadata_{start}.json").write_text("{}")
 
 
-class TestHarvest(unittest.TestCase):
-    def test_harvest_moves_frames_keeps_sequence_dir(self):
+class TestDataFolder(unittest.TestCase):
+    def test_derives_path_from_project_settings(self):
         with tempfile.TemporaryDirectory() as tmp:
-            solo = make_solo(tmp)
-            before = run_scenario.snapshot_step_files(home=tmp)
-            append_steps(solo, 0, 3)
-            new = run_scenario.snapshot_step_files(home=tmp) - before
+            root = write_project(Path(tmp) / "repo", company="Foo", product="Bar")
+            got = run_scenario.unity_data_folder(project_root=root, home=Path(tmp))
+            self.assertEqual(got.name, "Bar")
+            self.assertEqual(got.parent.name, "Foo")
 
+    def test_snapshot_excludes_telemetry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data = make_data_folder(Path(tmp))
+            (data / "run_metadata_x.json").write_text("{}")
+            snap = run_scenario.snapshot_capture_state(data)
+            names = {p.name for p in snap}
+            self.assertIn("solo", names)
+            self.assertIn("run_metadata_x.json", names)
+            self.assertNotIn("Unity", names)
+            self.assertNotIn("analytics", names)
+
+
+class TestHarvestRestore(unittest.TestCase):
+    def test_harvest_moves_frames_and_restores_folder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data = make_data_folder(Path(tmp))
+            before = run_scenario.snapshot_capture_state(data)
+            append_capture(data, 0, 3)  # the run writes 3 frames + metadata
+
+            run_scenario.wait_for_capture(data, before, timeout_s=2, settle_s=0)
             out = Path(tmp) / "out"
-            run_scenario.harvest_step_files(out, new, home=tmp)
+            frames = run_scenario.harvest_and_restore(out, data, before)
 
-            # frames moved out, both cameras preserved, definitions copied
+            self.assertEqual(frames, 3)
             self.assertEqual(len(list(out.rglob("*.frame_data.json"))), 3)
-            self.assertEqual(len(list(out.rglob("*.png"))), 6)
+            self.assertEqual(len(list(out.rglob("*.png"))), 6)  # both cameras
             self.assertTrue((out / "annotation_definitions.json").exists())
-            # the live sequence dir survives, emptied of harvested frames
-            self.assertTrue((solo / "sequence.0").is_dir())
-            self.assertEqual(list((solo / "sequence.0").glob("step*")), [])
+            # data folder is byte-for-byte back to before
+            self.assertEqual(run_scenario.snapshot_capture_state(data), before)
 
-    def test_two_scenarios_split_by_new_steps(self):
+    def test_second_run_independent_and_restores(self):
         with tempfile.TemporaryDirectory() as tmp:
-            solo = make_solo(tmp)
-            # scenario 1 appends steps 0..2, scenario 2 appends 3..5 (same seq.0)
-            b1 = run_scenario.snapshot_step_files(home=tmp)
-            append_steps(solo, 0, 3)
-            run_scenario.harvest_step_files(
-                Path(tmp) / "s1", run_scenario.snapshot_step_files(home=tmp) - b1, home=tmp)
-            b2 = run_scenario.snapshot_step_files(home=tmp)
-            append_steps(solo, 3, 3)
-            run_scenario.harvest_step_files(
-                Path(tmp) / "s2", run_scenario.snapshot_step_files(home=tmp) - b2, home=tmp)
+            data = make_data_folder(Path(tmp))
+            # run 1
+            b1 = run_scenario.snapshot_capture_state(data)
+            append_capture(data, 0, 3)
+            run_scenario.harvest_and_restore(Path(tmp) / "s1", data, b1)
+            self.assertEqual(run_scenario.snapshot_capture_state(data), b1)
+            # run 2 appends more steps to the same solo (Perception behaviour)
+            b2 = run_scenario.snapshot_capture_state(data)
+            append_capture(data, 3, 4)
+            f2 = run_scenario.harvest_and_restore(Path(tmp) / "s2", data, b2)
+            self.assertEqual(f2, 4)
+            self.assertEqual(run_scenario.snapshot_capture_state(data), b2)
 
-            self.assertEqual(len(list((Path(tmp) / "s1").rglob("*.frame_data.json"))), 3)
-            self.assertEqual(len(list((Path(tmp) / "s2").rglob("*.frame_data.json"))), 3)
-
-    def test_ignores_pre_existing_residue(self):
+    def test_wait_raises_when_perception_wrote_nothing(self):
         with tempfile.TemporaryDirectory() as tmp:
-            solo = make_solo(tmp)
-            append_steps(solo, 0, 2)  # stale residue from an earlier session
-            before = run_scenario.snapshot_step_files(home=tmp)
-            append_steps(solo, 2, 3)  # this run's frames
-            new = run_scenario.snapshot_step_files(home=tmp) - before
-            run_scenario.harvest_step_files(Path(tmp) / "out", new, home=tmp)
-            # only the run's own 3 frames are harvested, not the 2 residue
-            self.assertEqual(len(list((Path(tmp) / "out").rglob("*.frame_data.json"))), 3)
-
-    def test_empty_raises(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaisesRegex(RuntimeError, "No new SOLO frames"):
-                run_scenario.harvest_step_files(Path(tmp) / "out", set())
+            data = make_data_folder(Path(tmp))
+            before = run_scenario.snapshot_capture_state(data)
+            with self.assertRaisesRegex(RuntimeError, "no frames"):
+                run_scenario.wait_for_capture(data, before, timeout_s=1, settle_s=0)
 
 
 if __name__ == "__main__":

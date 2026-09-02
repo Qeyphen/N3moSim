@@ -21,12 +21,12 @@ Example:
 from __future__ import annotations
 
 import argparse
-import glob
 import json
 import os
 import shlex
 import shutil
 import subprocess
+import sys
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -241,81 +241,118 @@ SOLO_DEFINITION_FILES = frozenset({
 })
 
 
-def find_solo_dirs(home: str | None = None) -> list[Path]:
-    home = home or str(Path.home())
-    dirs: list[Path] = []
-    for pat in (
-        f"{home}/.config/unity3d/*/*/solo*",
-        f"{home}/Library/Application Support/*/*/solo*",
-    ):
-        for p in glob.glob(pat):
-            path = Path(p)
-            if path.is_dir():
-                dirs.append(path.resolve())
-    return sorted(set(dirs))
+# Subfolder of the Unity data folder that holds editor telemetry, not capture
+# output; excluded from before/after comparisons.
+DATA_FOLDER_IGNORE = frozenset({"Unity", ".DS_Store"})
 
 
-def snapshot_step_files(home: str | None = None) -> set[Path]:
-    """Every per-frame file under any SOLO sequence. Perception keeps one SOLO
-    dir with a single `sequence.0` for the whole Play session and appends each
-    frame as `stepN.*` (both stereo cameras + frame_data), so a run's output is
-    exactly the step files that appear after it started. We lift those out and
-    leave the sequence dir in place for Perception to keep writing into."""
-    files: set[Path] = set()
-    for solo in find_solo_dirs(home):
-        for seq in solo.glob("sequence.*"):
-            for f in seq.iterdir():
-                if f.is_file() and f.name.startswith("step"):
-                    files.add(f.resolve())
-    return files
+def unity_data_folder(project_root: Path | None = None, home: Path | None = None) -> Path:
+    """The Unity persistentDataPath for this project, derived from companyName /
+    productName in ProjectSettings so it matches wherever Perception writes,
+    regardless of prior cleanups."""
+    project_root = project_root or Path(__file__).resolve().parent.parent
+    home = home or Path.home()
+    ps = (project_root / "ProjectSettings" / "ProjectSettings.asset").read_text()
+    company = product = None
+    for line in ps.splitlines():
+        s = line.strip()
+        if s.startswith("companyName:"):
+            company = s.split(":", 1)[1].strip()
+        elif s.startswith("productName:"):
+            product = s.split(":", 1)[1].strip()
+    if not company or not product:
+        raise RuntimeError("companyName/productName not found in ProjectSettings")
+    mac = home / "Library" / "Application Support" / company / product
+    if mac.exists() or sys.platform == "darwin":
+        return mac
+    return home / ".config" / "unity3d" / company / product
 
 
-def wait_for_new_step_files(
-    before: set[Path], *, timeout_s: float = 45.0, settle_s: float = 4.0
+def snapshot_capture_state(data_folder: Path) -> set[Path]:
+    """Every capture-related path under the data folder (solo dirs + root
+    metadata), excluding editor telemetry. Used to diff what a run produced and
+    to restore the folder to its exact pre-run state afterwards."""
+    if not data_folder.exists():
+        return set()
+    out: set[Path] = set()
+    for entry in data_folder.iterdir():
+        if entry.name in DATA_FOLDER_IGNORE:
+            continue
+        out.add(entry.resolve())
+        if entry.is_dir():
+            out |= {p.resolve() for p in entry.rglob("*")}
+    return out
+
+
+def count_frame_data(paths: set[Path]) -> int:
+    return sum(1 for p in paths if p.name.endswith(".frame_data.json"))
+
+
+def wait_for_capture(
+    data_folder: Path, before: set[Path], *, timeout_s: float = 60.0, settle_s: float = 4.0
 ) -> set[Path]:
+    """Wait until the run's new frame_data files appear and their count stops
+    growing (both stereo cameras finished flushing). Returns the paths added
+    since `before`."""
     deadline = time.monotonic() + timeout_s
-    last_count = -1
+    last = -1
     stable_at: float | None = None
     while time.monotonic() < deadline:
-        new = snapshot_step_files() - before
-        if new and len(new) == last_count:
+        new = snapshot_capture_state(data_folder) - before
+        n = count_frame_data(new)
+        if n > 0 and n == last:
             if stable_at is not None and time.monotonic() - stable_at >= settle_s:
-                return snapshot_step_files() - before
+                return snapshot_capture_state(data_folder) - before
         else:
-            last_count = len(new)
-            stable_at = time.monotonic() if new else None
+            last = n
+            stable_at = time.monotonic() if n > 0 else None
         time.sleep(0.5)
-    result = snapshot_step_files() - before
-    if not result:
-        raise RuntimeError("No new SOLO frames appeared after the run")
-    return result
+    new = snapshot_capture_state(data_folder) - before
+    if count_frame_data(new) == 0:
+        raise RuntimeError(
+            "Perception wrote no frames to the SOLO folder "
+            f"({data_folder}). The capture endpoint produced nothing."
+        )
+    return new
 
 
-def harvest_step_files(
-    output_dir: Path, new_files: set[Path], home: str | None = None
-) -> int:
-    """Move the run's frame files out of the live SOLO sequence into output_dir
-    (mirroring the sequence sub-folder) and copy the SOLO schema definitions
-    alongside. Frames never accumulate in the Unity data folder, and the SOLO
-    dir Perception is actively writing to is never removed."""
-    if not new_files:
-        raise RuntimeError("No new SOLO frames to harvest")
+def harvest_and_restore(output_dir: Path, data_folder: Path, before: set[Path]) -> int:
+    """Move the run's frames into output_dir, then delete everything the run
+    added so the Unity data folder is byte-for-byte back to its pre-run state.
+    Returns the number of frame_data files harvested."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    for solo in find_solo_dirs(home):
-        for name in SOLO_DEFINITION_FILES:
-            src = solo / name
-            dst = output_dir / name
-            if src.exists() and not dst.exists():
-                shutil.copy2(str(src), str(dst))
-    moved = 0
-    for f in sorted(new_files):
-        if not f.exists():
+    added = snapshot_capture_state(data_folder) - before
+
+    # Copy the SOLO schema definitions so the scenario folder is standalone.
+    for p in added:
+        if p.name in SOLO_DEFINITION_FILES:
+            dst = output_dir / p.name
+            if not dst.exists():
+                shutil.copy2(str(p), str(dst))
+
+    # Move the frame files (step*.* inside sequence dirs) into the output.
+    frames = 0
+    for p in sorted(added):
+        if p.is_file() and p.name.startswith("step") and p.parent.name.startswith("sequence."):
+            dst_dir = output_dir / p.parent.name
+            dst_dir.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(p), str(dst_dir / p.name))
+            if p.name.endswith(".frame_data.json"):
+                frames += 1
+
+    # Delete everything else the run added (leftover metadata, empty sequence
+    # dirs, any new solo* dir), deepest first, so the folder equals `before`.
+    for p in sorted(added, key=lambda q: len(str(q)), reverse=True):
+        if not p.exists():
             continue
-        dst_dir = output_dir / f.parent.name
-        dst_dir.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(f), str(dst_dir / f.name))
-        moved += 1
-    return moved
+        if p.is_dir():
+            try:
+                p.rmdir()
+            except OSError:
+                pass
+        else:
+            p.unlink()
+    return frames
 
 
 def drive_until_done(
@@ -451,7 +488,15 @@ def main() -> None:
     print("Ensuring ros_bridge and scenario services are up...")
     run(["docker", "compose", "up", "-d", "ros_bridge", "scenario"])
 
-    steps_before = snapshot_step_files()
+    # Perception's SOLO endpoint writes into <persistentDataPath>/solo and does
+    # not recreate it if it was deleted (e.g. a manual data-folder cleanup),
+    # producing soloDir=(none) and zero frames. Ensure it exists so a run is
+    # robust to a cleaned data folder, then snapshot so we can restore it byte
+    # for byte afterwards.
+    data_folder = unity_data_folder()
+    (data_folder / "solo").mkdir(parents=True, exist_ok=True)
+    capture_before = snapshot_capture_state(data_folder)
+    print(f"Unity data folder: {data_folder} ({len(capture_before)} capture entries before run)")
 
     spec.generated_scenario_path = generate_scene_once(spec)
     print(f"Scene template generated once: {spec.generated_scenario_path}")
@@ -485,9 +530,17 @@ def main() -> None:
     if return_code != 0 and not hit_deadline:
         raise subprocess.CalledProcessError(return_code, cmd)
 
-    harvest_step_files(output_dir, wait_for_new_step_files(steps_before))
+    wait_for_capture(data_folder, capture_before)
+    harvest_and_restore(output_dir, data_folder, capture_before)
     frame_count = count_frame_jsons(output_dir)
     write_run_summary(spec, output_dir, frame_count)
+
+    capture_after = snapshot_capture_state(data_folder)
+    if capture_after == capture_before:
+        print("Unity data folder restored to its pre-run state.")
+    else:
+        leaked = sorted(str(p) for p in capture_after - capture_before)
+        print(f"WARNING: data folder not fully restored, leftover: {leaked[:5]}")
 
     print(f"Saved run -> {output_dir}")
     print(f"Frames captured: {frame_count}")
