@@ -1214,8 +1214,6 @@ MonoBehaviour:
     prefab: {fileID: 4216354705029087019, guid: 7c0e12d287f2c448d93c432275f67f7d, type: 3}
   - type: 6
     prefab: {fileID: 53890749614633803, guid: c2856ad9ff3c94128b0bf39c9442b087, type: 3}
-  - type: 13
-    prefab: {fileID: 653640049618998577, guid: 2e27ddaff8617462eb98fb4f547d6304, type: 3}
   container: {fileID: 0}
   motionHeadingThreshold: 0.05
   normalizePrefabVisuals: 1
