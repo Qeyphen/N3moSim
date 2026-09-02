@@ -230,8 +230,9 @@ def publish_scenario_info(spec: ScenarioRunSpec, output_dir: Path) -> None:
     )
 
 
-# SOLO root files that just define the dataset schema; identical across the
-# stereo cameras, so we keep one copy and drop the duplicate.
+# SOLO root files that define the dataset schema (both stereo cameras share
+# one SOLO dir). They are copied into each scenario folder so it is a valid
+# standalone dataset, and left in place for the ongoing Play session.
 SOLO_DEFINITION_FILES = frozenset({
     "annotation_definitions.json",
     "metadata.json",
@@ -254,57 +255,48 @@ def find_solo_dirs(home: str | None = None) -> list[Path]:
     return sorted(set(dirs))
 
 
-def solo_dir_mtimes(home: str | None = None) -> dict[Path, float]:
-    return {p: p.stat().st_mtime for p in find_solo_dirs(home)}
+def snapshot_sequences(home: str | None = None) -> set[Path]:
+    """All sequence.N dirs currently under the SOLO dirs. Perception keeps one
+    SOLO dir for the whole Play session (both stereo cameras write into it) and
+    appends a new sequence per recording, so a run's own output is exactly the
+    sequences that appear after it started. We must never delete the SOLO dir
+    itself, only lift out the sequences this run produced."""
+    seqs: set[Path] = set()
+    for solo in find_solo_dirs(home):
+        for child in solo.iterdir():
+            if child.is_dir() and child.name.startswith("sequence."):
+                seqs.add(child.resolve())
+    return seqs
 
 
-def wait_for_fresh_solo_dirs(
-    before: dict[Path, float], *, timeout_s: float = 30.0, settle_s: float = 3.0
+def wait_for_new_sequences(
+    before: set[Path], *, timeout_s: float = 45.0, settle_s: float = 3.0
 ) -> list[Path]:
-    """Return the SOLO dirs created or updated since `before`. Perception owns
-    its output dirs for the whole Play session and finalises them when a
-    recording stops, so we must never delete a dir it is still using: we only
-    ever harvest the ones this run produced. The short settle lets the second
-    stereo camera's dir land before we read the set."""
-    def fresh() -> list[Path]:
-        return [
-            p for p in find_solo_dirs()
-            if p not in before or p.stat().st_mtime > before.get(p, 0.0) + 1e-6
-        ]
-
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
-        if fresh():
-            time.sleep(settle_s)
-            return fresh()
+        if snapshot_sequences() - before:
+            time.sleep(settle_s)  # let both cameras' frames finish flushing
+            return sorted(snapshot_sequences() - before)
         time.sleep(0.5)
-    raise RuntimeError("No SOLO dataset directory appeared after the run")
+    raise RuntimeError("No new SOLO sequence appeared after the run")
 
 
-def harvest_solo_dirs(output_dir: Path, solo_dirs: list[Path]) -> int:
-    """Merge every SOLO dir produced by the run into output_dir, then delete
-    them so the Unity data folder is left empty. The stereo rig writes one dir
-    per camera; each camera's sequence is kept, renumbered to avoid collision.
-    Returns the number of sequences harvested."""
-    if not solo_dirs:
-        raise RuntimeError("No SOLO dataset directory was produced by the run")
+def harvest_sequences(output_dir: Path, new_sequences: list[Path]) -> int:
+    """Move the run's new sequences into output_dir and copy the SOLO schema
+    definitions alongside, leaving the SOLO dir intact for the session. The
+    frame data (the only thing that grows) never stays in the Unity folder."""
+    if not new_sequences:
+        raise RuntimeError("No new SOLO sequence to harvest")
     output_dir.mkdir(parents=True, exist_ok=True)
-    next_seq = 0
-    for solo in solo_dirs:
-        for child in sorted(solo.iterdir()):
-            if child.is_dir() and child.name.startswith("sequence."):
-                shutil.move(str(child), str(output_dir / f"sequence.{next_seq}"))
-                next_seq += 1
-                continue
-            target = output_dir / child.name
-            if target.exists():
-                if child.name in SOLO_DEFINITION_FILES:
-                    child.unlink()
-                    continue
-                target = output_dir / f"{child.stem}__{solo.name}{child.suffix}"
-            shutil.move(str(child), str(target))
-        solo.rmdir()
-    return next_seq
+    for seq in new_sequences:
+        for name in SOLO_DEFINITION_FILES:
+            src = seq.parent / name
+            dst = output_dir / name
+            if src.exists() and not dst.exists():
+                shutil.copy2(str(src), str(dst))
+    for i, seq in enumerate(sorted(new_sequences)):
+        shutil.move(str(seq), str(output_dir / f"sequence.{i}"))
+    return len(new_sequences)
 
 
 def drive_until_done(
@@ -440,7 +432,7 @@ def main() -> None:
     print("Ensuring ros_bridge and scenario services are up...")
     run(["docker", "compose", "up", "-d", "ros_bridge", "scenario"])
 
-    solo_before = solo_dir_mtimes()
+    sequences_before = snapshot_sequences()
 
     spec.generated_scenario_path = generate_scene_once(spec)
     print(f"Scene template generated once: {spec.generated_scenario_path}")
@@ -474,7 +466,7 @@ def main() -> None:
     if return_code != 0 and not hit_deadline:
         raise subprocess.CalledProcessError(return_code, cmd)
 
-    harvest_solo_dirs(output_dir, wait_for_fresh_solo_dirs(solo_before))
+    harvest_sequences(output_dir, wait_for_new_sequences(sequences_before))
     frame_count = count_frame_jsons(output_dir)
     write_run_summary(spec, output_dir, frame_count)
 
