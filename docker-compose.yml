@@ -63,7 +63,7 @@ services:
         source /opt/ros/humble/setup.bash
         source /root/ros2_ws/install/setup.bash
         ros2 run n3_sim tracks_markers &
-        ros2 run n3_sim scenario_generator --ros-args -p gen_on_first_costmap:=true -p gen_track_count:=8 -p gen_spawn_spread_s:=20.0 -p gen_max_waypoints:=10 -p "gen_type_names:=[sailboat,kayak,paddleboard,swimmer,dinghy,debris,windsurf,kitesurf]"
+        ros2 run n3_sim scenario_generator --ros-args -p gen_on_first_costmap:=true -p gen_spawn_spread_s:=20.0 -p gen_max_waypoints:=10
     restart: unless-stopped
 
   # Integrated GUI: `docker compose --profile rviz up`. Needs XQuartz/X11 on the host.
